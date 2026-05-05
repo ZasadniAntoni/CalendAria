@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="teal_dark">#FF05696F</color>
+    <color name="teal_light">#FF0AAA99</color>
+    <color name="teal_light2">#FF2AAFBA</color>
+    <color name="green">#FF109910</color>
+    <color name="red">#FFCC2020</color>
+    <color name="black">#FF111111</color>
+    <color name="grey">#FF333333</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Daily Plan Palette (70% alpha) -->
+    <color name="plan_navy">#B21B3461</color>
+    <color name="plan_red">#B25E1B1B</color>
+    <color name="plan_pink">#B2882255</color>
+    <color name="plan_orange">#B28B4513</color>
+    <color name="plan_brown">#B23E2723</color>
+    <color name="plan_grey">#B22C2C2C</color>
+    <color name="plan_purple">#B24A148C</color>
+    <color name="plan_teal">#B2004D40</color>
+    <color name="plan_green">#B21B5E20</color>
+</resources>
