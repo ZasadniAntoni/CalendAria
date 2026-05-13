@@ -110,19 +110,24 @@ fun ImportantTasksScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = task.title,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 18.sp,
+                                        modifier = Modifier.weight(1f),
                                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                                         color = if (task.isCompleted) Color.Gray else Color.Unspecified
                                     )
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         text = task.dueDate,
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = if (task.isCompleted) Color.Gray else MaterialTheme.colorScheme.error
+                                        color = if (task.isCompleted) Color.Gray else MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.wrapContentWidth(),
+                                        softWrap = false
                                     )
                                 }
                                 Text(
