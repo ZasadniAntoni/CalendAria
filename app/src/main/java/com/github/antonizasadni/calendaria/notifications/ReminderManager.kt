@@ -4,7 +4,9 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import com.github.antonizasadni.calendaria.tasks.DailyPlan
 import com.github.antonizasadni.calendaria.tasks.ImportantTask
+import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -16,10 +18,14 @@ import java.util.Calendar
 object ReminderManager {
     private const val ID_REMINDER = 100
     private const val IMPORTANT_TASK_BASE_ID = 2000
+    private const val REPETITIVE_TASK_BASE_ID = 3000
+    private const val DAILY_PLAN_BASE_ID = 4000
 
     fun scheduleReminders(context: Context) {
         scheduleWeeklyReminders(context)
         scheduleAllImportantTasks(context)
+        scheduleAllRepetitiveTasks(context)
+        scheduleAllDailyPlans(context)
     }
 
     private fun scheduleWeeklyReminders(context: Context) {
@@ -79,11 +85,14 @@ object ReminderManager {
         }
 
         try {
-            val date = LocalDate.parse(task.dueDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-            val time = if (task.time == "Whole Day") {
+            val dateStr = task.reminderDate ?: task.taskDate
+            val timeStr = task.reminderTime ?: task.taskTime
+            
+            val date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+            val time = if (timeStr == "Whole Day") {
                 LocalTime.of(8, 0)
             } else {
-                val p = parseTime(task.time)
+                val p = parseTime(timeStr)
                 LocalTime.of(p.first, p.second)
             }
 
@@ -127,6 +136,134 @@ object ReminderManager {
         alarmManager.cancel(pendingIntent)
     }
 
+    fun scheduleAllRepetitiveTasks(context: Context) {
+        val tasks = TaskManagement.loadRepetitiveTasks(context)
+        tasks.forEach { task ->
+            scheduleRepetitiveTask(context, task)
+        }
+    }
+
+    fun scheduleRepetitiveTask(context: Context, task: RepetitiveTask) {
+        if (!task.notificationsEnabled) {
+            cancelRepetitiveTask(context, task)
+            return
+        }
+
+        try {
+            val today = LocalDate.now()
+            val dayOfWeek = today.dayOfWeek.value
+            
+            if (!task.selectedDays.contains(dayOfWeek)) return
+
+            val time = if (task.time == "Whole Day") {
+                LocalTime.of(8, 0)
+            } else {
+                val p = parseTime(task.time)
+                LocalTime.of(p.first, p.second)
+            }
+
+            val triggerTime = LocalDateTime.of(today, time)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+
+            if (triggerTime <= System.currentTimeMillis()) return
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, ReminderReceiver::class.java).apply {
+                putExtra("type", "habit")
+                putExtra("task_id", task.id)
+                putExtra("task_title", task.title)
+                putExtra("task_desc", task.description)
+            }
+            
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                REPETITIVE_TASK_BASE_ID + task.id.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            setAlarm(alarmManager, triggerTime, pendingIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun cancelRepetitiveTask(context: Context, task: RepetitiveTask) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, ReminderReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            REPETITIVE_TASK_BASE_ID + task.id.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+    }
+
+    fun scheduleAllDailyPlans(context: Context) {
+        val plans = TaskManagement.loadDailyPlans(context)
+        plans.forEach { plan ->
+            scheduleDailyPlan(context, plan)
+        }
+    }
+
+    fun scheduleDailyPlan(context: Context, plan: DailyPlan) {
+        if (!plan.notificationsEnabled || plan.isCompleted) {
+            cancelDailyPlan(context, plan)
+            return
+        }
+
+        try {
+            val date = LocalDate.parse(plan.date, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+            val time = if (plan.time == "Whole Day") {
+                LocalTime.of(8, 0)
+            } else {
+                val p = parseTime(plan.time)
+                LocalTime.of(p.first, p.second)
+            }
+
+            val triggerTime = LocalDateTime.of(date, time)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+
+            if (triggerTime <= System.currentTimeMillis()) return
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, ReminderReceiver::class.java).apply {
+                putExtra("type", "plan")
+                putExtra("task_id", plan.id)
+                putExtra("task_title", plan.title)
+                putExtra("task_desc", "")
+            }
+            
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                DAILY_PLAN_BASE_ID + plan.id.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            setAlarm(alarmManager, triggerTime, pendingIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun cancelDailyPlan(context: Context, plan: DailyPlan) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, ReminderReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            DAILY_PLAN_BASE_ID + plan.id.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+    }
+
     private fun setAlarm(alarmManager: AlarmManager, triggerTime: Long, pendingIntent: PendingIntent) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             if (alarmManager.canScheduleExactAlarms()) {
@@ -153,8 +290,9 @@ object ReminderManager {
 
     fun cancelReminders(context: Context) {
         cancelWeeklyReminders(context)
-        val tasks = TaskManagement.loadImportantTasks(context)
-        tasks.forEach { cancelImportantTask(context, it) }
+        TaskManagement.loadImportantTasks(context).forEach { cancelImportantTask(context, it) }
+        TaskManagement.loadRepetitiveTasks(context).forEach { cancelRepetitiveTask(context, it) }
+        TaskManagement.loadDailyPlans(context).forEach { cancelDailyPlan(context, it) }
     }
 
     private fun parseTime(timeStr: String): Pair<Int, Int> {

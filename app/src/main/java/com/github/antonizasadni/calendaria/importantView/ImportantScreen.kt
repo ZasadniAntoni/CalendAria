@@ -2,6 +2,8 @@ package com.github.antonizasadni.calendaria.importantView
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -13,6 +15,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.animation.*
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -59,10 +66,10 @@ fun ImportantTasksScreen(
                 }
                 val matchesDate = activeFilter.selectedDate?.let { nonNullDate ->
                     val filterDateString = nonNullDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                    task.dueDate == filterDateString
+                    task.taskDate == filterDateString
                 } ?: true
                 matchesSearch && matchesStatus && matchesDate
-            }.sortedWith(compareBy<ImportantTask> { it.isCompleted }.thenBy { it.dueDate })
+            }.sortedWith(compareBy<ImportantTask> { it.isCompleted }.thenBy { it.taskDate })
         }
     }
 
@@ -123,7 +130,7 @@ fun ImportantTasksScreen(
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = task.dueDate,
+                                        text = task.taskDate,
                                         style = MaterialTheme.typography.labelMedium,
                                         color = if (task.isCompleted) Color.Gray else MaterialTheme.colorScheme.error,
                                         modifier = Modifier.wrapContentWidth(),
@@ -131,7 +138,7 @@ fun ImportantTasksScreen(
                                     )
                                 }
                                 Text(
-                                    text = "Time: ${TaskManagement.formatTime(context, task.time)}",
+                                    text = "Time: ${TaskManagement.formatTime(context, task.taskTime)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (task.isCompleted) Color.Gray else Color.Unspecified
                                 )
@@ -254,7 +261,7 @@ fun ViewImportantTaskDialog(
             }
         },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -266,13 +273,37 @@ fun ViewImportantTaskDialog(
                     Text(text = if (task.isCompleted) "Completed" else "Mark as Completed")
                 }
                 val context = LocalContext.current
-                Text(text = "Due Date: ${task.dueDate}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
+                Text(text = "Due Date: ${task.taskDate}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
                 Text(
-                    text = if (task.time == "Whole Day") "Time: Whole Day" else "Time: ${TaskManagement.formatTime(context, task.time)} (${task.durationMinutes} min)",
+                    text = if (task.taskTime == "Whole Day") "Time: Whole Day" else "Time: ${TaskManagement.formatTime(context, task.taskTime)} (${task.durationMinutes} min)",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Text(text = "Notifications: ${if (task.notificationsEnabled) "Enabled" else "Disabled"}", style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (task.notificationsEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                        contentDescription = null,
+                        tint = if (task.notificationsEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Notifications: ${if (task.notificationsEnabled) "ON" else "OFF"}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (task.notificationsEnabled) MaterialTheme.colorScheme.primary else Color.Gray
+                    )
+                }
+                
+                if (task.notificationsEnabled) {
+                    val rDate = task.reminderDate ?: task.taskDate
+                    val rTime = task.reminderTime ?: task.taskTime
+                    Text(
+                        text = "Reminder: $rDate, ${TaskManagement.formatTime(context, if (rTime == "Whole Day") "08:00 AM" else rTime)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = task.description, style = MaterialTheme.typography.bodyLarge)
             }
@@ -299,25 +330,42 @@ fun AddImportantTaskDialog(
     val context = LocalContext.current
     var title by remember { mutableStateOf(existingTask?.title ?: "") }
     var description by remember { mutableStateOf(existingTask?.description ?: "") }
-    var dueDate by remember { mutableStateOf(existingTask?.dueDate ?: LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))) }
-    var time by remember { mutableStateOf(existingTask?.time ?: "Whole Day") }
+    var taskDate by remember { mutableStateOf(existingTask?.taskDate ?: LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))) }
+    var taskTime by remember { mutableStateOf(existingTask?.taskTime ?: "Whole Day") }
     var durationMinutes by remember { mutableIntStateOf(existingTask?.durationMinutes?.takeIf { it > 0 } ?: 60) }
     var notificationsEnabled by remember { mutableStateOf(existingTask?.notificationsEnabled ?: true) }
+    
+    // Reminder states
+    var reminderDate by remember { mutableStateOf(existingTask?.reminderDate ?: taskDate) }
+    var reminderTime by remember { mutableStateOf(existingTask?.reminderTime ?: taskTime) }
+    
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showReminderDatePicker by remember { mutableStateOf(false) }
+    var showReminderTimePicker by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = if (existingTask != null) {
-            LocalDate.parse(existingTask.dueDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+            LocalDate.parse(existingTask.taskDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                 .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         } else System.currentTimeMillis()
+    )
+    
+    val reminderDatePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = try {
+            LocalDate.parse(reminderDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        } catch (e: Exception) { System.currentTimeMillis() }
     )
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingTask == null) "New Important Task" else "Edit Important Task") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -333,7 +381,7 @@ fun AddImportantTaskDialog(
                 )
 
                 OutlinedTextField(
-                    value = dueDate,
+                    value = taskDate,
                     onValueChange = { },
                     label = { Text("Due Date") },
                     modifier = Modifier.fillMaxWidth(),
@@ -346,14 +394,14 @@ fun AddImportantTaskDialog(
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = time == "Whole Day", onClick = { time = "Whole Day" })
+                    RadioButton(selected = taskTime == "Whole Day", onClick = { taskTime = "Whole Day" })
                     Text("Whole Day")
                     Spacer(modifier = Modifier.width(8.dp))
-                    RadioButton(selected = time != "Whole Day", onClick = { showTimePicker = true })
-                    Text(if (time == "Whole Day") "Specific Time" else TaskManagement.formatTime(context, time))
+                    RadioButton(selected = taskTime != "Whole Day", onClick = { showTimePicker = true })
+                    Text(if (taskTime == "Whole Day") "Specific Time" else TaskManagement.formatTime(context, taskTime))
                 }
 
-                if (time != "Whole Day") {
+                if (taskTime != "Whole Day") {
                     Text("Duration: $durationMinutes minutes", style = MaterialTheme.typography.labelLarge)
                     Slider(
                         value = durationMinutes.toFloat(),
@@ -364,11 +412,112 @@ fun AddImportantTaskDialog(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().clickable { notificationsEnabled = !notificationsEnabled },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { notificationsEnabled = !notificationsEnabled }
+                        .padding(vertical = 12.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(checked = notificationsEnabled, onCheckedChange = { notificationsEnabled = it })
-                    Text("Enable Notifications")
+                    val tint by animateColorAsState(
+                        if (notificationsEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
+                        label = "bellTint"
+                    )
+
+                    AnimatedContent(
+                        targetState = notificationsEnabled,
+                        transitionSpec = {
+                            (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
+                        },
+                        label = "bellAnimation"
+                    ) { enabled ->
+                        Icon(
+                            imageVector = if (enabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                            contentDescription = null,
+                            tint = tint,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Text(
+                        text = if (notificationsEnabled) "Notification ON" else "Notification OFF",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = tint
+                    )
+                }
+
+                if (notificationsEnabled) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Set Reminder For:",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            
+                            val isDefault = reminderDate == taskDate && reminderTime == taskTime
+                            if (!isDefault) {
+                                TextButton(
+                                    onClick = {
+                                        reminderDate = taskDate
+                                        reminderTime = taskTime
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Icon(Icons.Default.Sync, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Default", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                        
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = reminderDate,
+                                onValueChange = { },
+                                label = { Text("Reminder Date") },
+                                modifier = Modifier.fillMaxWidth(),
+                                readOnly = true,
+                                shape = MaterialTheme.shapes.medium,
+                                trailingIcon = {
+                                    IconButton(onClick = { showReminderDatePicker = true }) {
+                                        Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            )
+                            
+                            OutlinedTextField(
+                                value = TaskManagement.formatTime(context, if (reminderTime == "Whole Day") "08:00 AM" else reminderTime),
+                                onValueChange = { },
+                                label = { Text("Reminder Time") },
+                                modifier = Modifier.fillMaxWidth(),
+                                readOnly = true,
+                                shape = MaterialTheme.shapes.medium,
+                                trailingIcon = {
+                                    IconButton(onClick = { showReminderTimePicker = true }) {
+                                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -381,11 +530,13 @@ fun AddImportantTaskDialog(
                             id = existingTask?.id ?: UUID.randomUUID().toString(),
                             title = title,
                             description = description,
-                            dueDate = dueDate,
-                            time = time,
+                            taskDate = taskDate,
+                            taskTime = taskTime,
                             durationMinutes = durationMinutes,
                             isCompleted = existingTask?.isCompleted ?: false,
-                            notificationsEnabled = notificationsEnabled
+                            notificationsEnabled = notificationsEnabled,
+                            reminderDate = if (notificationsEnabled) reminderDate else null,
+                            reminderTime = if (notificationsEnabled) reminderTime else null
                         )
                     )
                 }
@@ -402,10 +553,14 @@ fun AddImportantTaskDialog(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        dueDate = Instant.ofEpochMilli(millis)
+                        val newDate = Instant.ofEpochMilli(millis)
                             .atZone(ZoneId.systemDefault())
                             .toLocalDate()
                             .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                        
+                        // If reminder was in sync, keep it in sync
+                        if (reminderDate == taskDate) reminderDate = newDate
+                        taskDate = newDate
                     }
                     showDatePicker = false
                 }) { Text("OK") }
@@ -420,11 +575,46 @@ fun AddImportantTaskDialog(
 
     if (showTimePicker) {
         CustomClockDialog(
-            initialTime = time,
+            initialTime = taskTime,
             onDismiss = { showTimePicker = false },
             onConfirm = { hour, minute, amPm ->
-                time = TaskManagement.convertToUniformTime(hour, minute, amPm)
+                val newTime = TaskManagement.convertToUniformTime(hour, minute, amPm)
+                if (reminderTime == taskTime) reminderTime = newTime
+                taskTime = newTime
                 showTimePicker = false
+            }
+        )
+    }
+
+    if (showReminderDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showReminderDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    reminderDatePickerState.selectedDateMillis?.let { millis ->
+                        reminderDate = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                    }
+                    showReminderDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReminderDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = reminderDatePickerState)
+        }
+    }
+
+    if (showReminderTimePicker) {
+        CustomClockDialog(
+            initialTime = if (reminderTime == "Whole Day") "08:00 AM" else reminderTime,
+            onDismiss = { showReminderTimePicker = false },
+            onConfirm = { hour, minute, amPm ->
+                reminderTime = TaskManagement.convertToUniformTime(hour, minute, amPm)
+                showReminderTimePicker = false
             }
         )
     }

@@ -6,6 +6,8 @@ import com.google.gson.Gson
 import java.util.UUID
 import java.time.LocalDate
 
+import com.google.gson.annotations.SerializedName
+
 data class RepetitiveTask(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -16,18 +18,23 @@ data class RepetitiveTask(
     val type: String = "Repetitive",
     val isCompleted: Boolean = false,
     val createdAt: String = LocalDate.now().toString(),
+    val notificationsEnabled: Boolean = true
 )
 
 data class ImportantTask(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val description: String,
-    val dueDate: String,
-    val time: String = "Whole Day",
+    @SerializedName("taskDate", alternate = ["dueDate"])
+    val taskDate: String,
+    @SerializedName("taskTime", alternate = ["time"])
+    val taskTime: String = "Whole Day",
     val durationMinutes: Int = 60,
     val type: String = "Important",
     val isCompleted: Boolean = false,
-    val notificationsEnabled: Boolean = true
+    val notificationsEnabled: Boolean = true,
+    val reminderDate: String? = null,
+    val reminderTime: String? = null
 )
 
 data class DailyPlan(
@@ -37,7 +44,8 @@ data class DailyPlan(
     val durationMinutes: Int = 60,
     val date: String,
     val isCompleted: Boolean = false,
-    val color: Long = 0xB21B3A4B // Toned out Deep Navy (70% alpha)
+    val color: Long = 0xB21B3A4B, // Toned out Deep Navy (70% alpha)
+    val notificationsEnabled: Boolean = true
 )
 
 object TaskManagement {

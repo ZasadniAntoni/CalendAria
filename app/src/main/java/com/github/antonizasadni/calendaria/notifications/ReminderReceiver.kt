@@ -19,7 +19,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val type = intent.getStringExtra("type") ?: "both"
 
         when (type) {
-            "important" -> {
+            "important", "habit", "plan" -> {
                 val title = intent.getStringExtra("task_title") ?: "Pending Task"
                 val desc = intent.getStringExtra("task_desc") ?: ""
                 NotificationHelper.showNotification(context, title, desc)
@@ -95,12 +95,12 @@ class ReminderReceiver : BroadcastReceiver() {
         val todayStr = today.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
 
         importantTasks.forEach { task ->
-            if (task.notificationsEnabled && !task.isCompleted && task.dueDate == todayStr) {
+            if (task.notificationsEnabled && !task.isCompleted && task.taskDate == todayStr) {
                 val currentTime = java.time.LocalTime.now()
-                val taskTime = if (task.time == "Whole Day") {
+                val taskTime = if (task.taskTime == "Whole Day") {
                     java.time.LocalTime.of(8, 0)
                 } else {
-                    parseTaskTime(task.time)
+                    parseTaskTime(task.taskTime)
                 }
 
                 if (currentTime.isAfter(taskTime) || currentTime.equals(taskTime)) {

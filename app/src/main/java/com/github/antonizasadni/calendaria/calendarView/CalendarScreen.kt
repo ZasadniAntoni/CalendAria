@@ -125,7 +125,7 @@ fun CalendarScreen(
                     val date = yearMonth.atDay(dayNum)
                     val dateStr = date.format(dateFormatter)
                     val dRepetitive = repetitiveTasks.filter { TaskManagement.isTaskActiveOnDate(it, date) }
-                    val dImportant = importantTasks.filter { it.dueDate == dateStr }
+                    val dImportant = importantTasks.filter { it.taskDate == dateStr }
                     val isToday = dayNum == currentToday.dayOfMonth && month == currentToday.monthValue && year == currentToday.year
 
                     Card(

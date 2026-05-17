@@ -1,5 +1,7 @@
 package com.github.antonizasadni.calendaria.repetitiveView
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,6 +42,9 @@ import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
 import com.github.antonizasadni.calendaria.tasks.SearchableTopBar
 import com.github.antonizasadni.calendaria.tasks.TaskFilter
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
+import androidx.compose.animation.*
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import java.time.LocalDate
 import java.time.Instant
 import java.time.ZoneId
@@ -180,8 +185,10 @@ fun RepetitiveTasksScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        val taskToCancel = taskToDelete
                         tasks.removeIf { it.id == taskToDelete?.id }
                         TaskManagement.saveRepetitiveTasks(context, tasks)
+                        taskToCancel?.let { com.github.antonizasadni.calendaria.notifications.ReminderManager.cancelRepetitiveTask(context, it) }
                         onTasksChanged()
                         taskToDelete = null
                     },
@@ -206,6 +213,7 @@ fun RepetitiveTasksScreen(
                     tasks.add(updatedTask)
                 }
                 TaskManagement.saveRepetitiveTasks(context, tasks)
+                com.github.antonizasadni.calendaria.notifications.ReminderManager.scheduleRepetitiveTask(context, updatedTask)
                 onTasksChanged()
                 editingTask = null
             }
@@ -243,7 +251,7 @@ fun ViewRepetitiveTaskDialog(
             }
         },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 if (onToggleComplete != null) {
                     Row(
                         modifier = Modifier
@@ -264,6 +272,20 @@ fun ViewRepetitiveTaskDialog(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (task.notificationsEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                        contentDescription = null,
+                        tint = if (task.notificationsEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Notifications: ${if (task.notificationsEnabled) "ON" else "OFF"}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (task.notificationsEnabled) MaterialTheme.colorScheme.primary else Color.Gray
+                    )
+                }
                 Text(text = "Completion this month: $doneCount / $scheduledCount", style = MaterialTheme.typography.labelMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = task.description, style = MaterialTheme.typography.bodyLarge)
@@ -294,6 +316,7 @@ fun AddRepetitiveTaskDialog(
     var createdAt by remember { mutableStateOf(existingTask?.createdAt ?: LocalDate.now().toString()) }
     var time by remember { mutableStateOf(existingTask?.time ?: "Whole Day") }
     var durationMinutes by remember { mutableIntStateOf(existingTask?.durationMinutes?.takeIf { it > 0 } ?: 60) }
+    var notificationsEnabled by remember { mutableStateOf(existingTask?.notificationsEnabled ?: true) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -307,7 +330,10 @@ fun AddRepetitiveTaskDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingTask == null) "New Habit" else "Edit Habit") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -386,6 +412,44 @@ fun AddRepetitiveTaskDialog(
                         steps = 14
                     )
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { notificationsEnabled = !notificationsEnabled }
+                        .padding(vertical = 12.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val tint by animateColorAsState(
+                        if (notificationsEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
+                        label = "bellTint"
+                    )
+
+                    AnimatedContent(
+                        targetState = notificationsEnabled,
+                        transitionSpec = {
+                            (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
+                        },
+                        label = "bellAnimation"
+                    ) { enabled ->
+                        Icon(
+                            imageVector = if (enabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                            contentDescription = null,
+                            tint = tint,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Text(
+                        text = if (notificationsEnabled) "Notification ON" else "Notification OFF",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = tint
+                    )
+                }
             }
         },
         confirmButton = {
@@ -401,7 +465,8 @@ fun AddRepetitiveTaskDialog(
                             time = time,
                             durationMinutes = durationMinutes,
                             isCompleted = existingTask?.isCompleted ?: false,
-                            createdAt = createdAt
+                            createdAt = createdAt,
+                            notificationsEnabled = notificationsEnabled
                         )
                     )
                 }

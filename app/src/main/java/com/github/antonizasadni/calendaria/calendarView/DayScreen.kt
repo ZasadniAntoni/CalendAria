@@ -66,9 +66,9 @@ fun DayScreen(
         )
 
     val filteredImportant = importantTasks
-        .filter { it.dueDate == dateString }
+        .filter { it.taskDate == dateString }
         .sortedWith(
-            compareBy<ImportantTask> { TaskManagement.parseTimeToMinutes(it.time) }
+            compareBy<ImportantTask> { TaskManagement.parseTimeToMinutes(it.taskTime) }
         )
 
     Scaffold(
@@ -155,7 +155,7 @@ fun DayScreen(
                                         color = if (completed) Color.Gray else Color.Unspecified
                                     )
                                     Text(
-                                        text = "Time: ${TaskManagement.formatTime(context, task.time)}",
+                                        text = "Time: ${TaskManagement.formatTime(context, task.taskTime)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (completed) Color.Gray else MaterialTheme.colorScheme.primary
                                     )

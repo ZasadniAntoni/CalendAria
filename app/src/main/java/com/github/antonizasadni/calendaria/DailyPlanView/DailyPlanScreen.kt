@@ -29,6 +29,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.compose.animation.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import com.github.antonizasadni.calendaria.repetitiveView.CustomClockDialog
 import com.github.antonizasadni.calendaria.tasks.DailyPlan
 import com.github.antonizasadni.calendaria.tasks.ImportantTask
@@ -61,7 +65,7 @@ sealed class UnifiedTask {
     val time: String get() = when(this) {
         is Plan -> dailyPlan.time
         is Repetitive -> task.time
-        is Important -> task.time
+        is Important -> task.taskTime
     }
     val isCompleted: Boolean get() = when(this) {
         is Plan -> dailyPlan.isCompleted
@@ -120,7 +124,7 @@ fun DailyPlanScreen(
                 }
 
             val important = importantTasks
-                .filter { it.dueDate == dateStr }
+                .filter { it.taskDate == dateStr }
                 .map { UnifiedTask.Important(it) }
 
             (plans + repetitive + important)
@@ -391,6 +395,7 @@ fun DailyPlanScreen(
             onConfirm = { newPlan ->
                 dailyPlans.add(newPlan)
                 TaskManagement.saveDailyPlans(context, dailyPlans.toList())
+                com.github.antonizasadni.calendaria.notifications.ReminderManager.scheduleDailyPlan(context, newPlan)
                 onPlansChanged()
                 onDismissDialog()
             }
@@ -410,12 +415,15 @@ fun DailyPlanScreen(
                     dailyPlans.add(updatedPlan)
                 }
                 TaskManagement.saveDailyPlans(context, dailyPlans.toList())
+                com.github.antonizasadni.calendaria.notifications.ReminderManager.scheduleDailyPlan(context, updatedPlan)
                 onPlansChanged()
                 planToEdit = null
             },
             onDelete = {
+                val planToDelete = planToEdit
                 dailyPlans.removeIf { it.id == planToEdit?.id }
                 TaskManagement.saveDailyPlans(context, dailyPlans.toList())
+                planToDelete?.let { com.github.antonizasadni.calendaria.notifications.ReminderManager.cancelDailyPlan(context, it) }
                 onPlansChanged()
                 planToEdit = null
             }
@@ -525,13 +533,17 @@ fun AddOrEditDailyPlanDialog(
 
     val colors = colorResIds.map { colorResource(it).toArgb().toLong() }
     var selectedColor by remember { mutableLongStateOf(existingPlan?.color ?: colors[0]) }
+    var notificationsEnabled by remember { mutableStateOf(existingPlan?.notificationsEnabled ?: true) }
     var showTimePicker by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingPlan == null) "New Daily Plan" else "Edit Daily Plan") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -576,6 +588,44 @@ fun AddOrEditDailyPlanDialog(
                         )
                     }
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { notificationsEnabled = !notificationsEnabled }
+                        .padding(vertical = 12.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val tint by animateColorAsState(
+                        if (notificationsEnabled) MaterialTheme.colorScheme.primary else Color.Gray,
+                        label = "bellTint"
+                    )
+
+                    AnimatedContent(
+                        targetState = notificationsEnabled,
+                        transitionSpec = {
+                            (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
+                        },
+                        label = "bellAnimation"
+                    ) { enabled ->
+                        Icon(
+                            imageVector = if (enabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                            contentDescription = null,
+                            tint = tint,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Text(
+                        text = if (notificationsEnabled) "Notification ON" else "Notification OFF",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = tint
+                    )
+                }
             }
         },
         confirmButton = {
@@ -599,7 +649,8 @@ fun AddOrEditDailyPlanDialog(
                                 durationMinutes = durationMinutes,
                                 date = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
                                 isCompleted = existingPlan?.isCompleted ?: false,
-                                color = selectedColor
+                                color = selectedColor,
+                                notificationsEnabled = notificationsEnabled
                             )
                         )
                     }
