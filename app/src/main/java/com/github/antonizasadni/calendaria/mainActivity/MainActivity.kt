@@ -10,15 +10,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.github.antonizasadni.calendaria.completionList.FileManagement
+import com.github.antonizasadni.calendaria.tasks.Birthday
 import com.github.antonizasadni.calendaria.tasks.DailyPlan
 import com.github.antonizasadni.calendaria.tasks.ImportantTask
+import com.github.antonizasadni.calendaria.tasks.Note
 import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
 import com.github.antonizasadni.calendaria.ui.theme.CalendAriaTheme
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-import android.os.Build
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,7 +30,7 @@ import com.github.antonizasadni.calendaria.tasks.DataMigrationManager
 
 class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission(),
     ) { isGranted: Boolean ->
         if (isGranted) {
             NotificationHelper.createNotificationChannel(this)
@@ -57,14 +58,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }
@@ -80,7 +79,7 @@ fun CalendAriaApp() {
     var currentScreen by remember { mutableStateOf("calendar") }
     var selectedMonth by remember { mutableIntStateOf(today.monthValue) }
     var selectedYear by remember { mutableIntStateOf(today.year) }
-    var showAddTaskDialog by remember { mutableStateOf(false) }
+    var showAddTaskDialog by remember { mutableStateOf(value = false) }
 
     val repetitiveTasks = remember {
         mutableStateListOf<RepetitiveTask>().apply {
@@ -97,6 +96,16 @@ fun CalendAriaApp() {
             addAll(TaskManagement.loadDailyPlans(context))
         }
     }
+    val birthdays = remember {
+        mutableStateListOf<Birthday>().apply {
+            addAll(TaskManagement.loadBirthdays(context))
+        }
+    }
+    val notes = remember {
+        mutableStateListOf<Note>().apply {
+            addAll(TaskManagement.loadNotes(context))
+        }
+    }
 
     fun refreshTasks() {
         repetitiveTasks.clear()
@@ -105,6 +114,10 @@ fun CalendAriaApp() {
         importantTasks.addAll(TaskManagement.loadImportantTasks(context))
         dailyPlans.clear()
         dailyPlans.addAll(TaskManagement.loadDailyPlans(context))
+        birthdays.clear()
+        birthdays.addAll(TaskManagement.loadBirthdays(context))
+        notes.clear()
+        notes.addAll(TaskManagement.loadNotes(context))
     }
 
     ModalNavigationDrawer(
@@ -112,11 +125,10 @@ fun CalendAriaApp() {
         drawerContent = {
             AppDrawerContent(
                 currentScreen = currentScreen,
-                onNavigate = { screen ->
-                    currentScreen = screen
-                    scope.launch { drawerState.close() }
-                }
-            )
+            ) { screen ->
+                currentScreen = screen
+                scope.launch { drawerState.close() }
+            }
         }
     ) {
         AppScaffold(
@@ -134,14 +146,16 @@ fun CalendAriaApp() {
                     repetitiveTasks = repetitiveTasks,
                     importantTasks = importantTasks,
                     dailyPlans = dailyPlans,
+                    birthdays = birthdays,
+                    notes = notes,
                     selectedMonth = selectedMonth,
                     selectedYear = selectedYear,
-                    today = today,
                     showAddTaskDialog = showAddTaskDialog,
                     onDismissDialog = { showAddTaskDialog = false },
                     onMonthYearChange = { m, y -> selectedMonth = m; selectedYear = y },
-                    onTasksChanged = { refreshTasks() }
-                )
+                ) {
+                    refreshTasks()
+                }
             }
         }
     }

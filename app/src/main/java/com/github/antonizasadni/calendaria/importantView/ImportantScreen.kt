@@ -43,33 +43,37 @@ import java.util.UUID
 @Composable
 fun ImportantTasksScreen(
     tasks: MutableList<ImportantTask>,
-    onTasksChanged: () -> Unit
+    onTasksChanged: () -> Unit,
 ) {
     val context = LocalContext.current
     var viewingTask by remember { mutableStateOf<ImportantTask?>(null) }
     var editingTask by remember { mutableStateOf<ImportantTask?>(null) }
     var taskToDelete by remember { mutableStateOf<ImportantTask?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var showFilterSheet by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(value = false) }
     var activeFilter by remember { mutableStateOf(TaskFilter()) }
 
     // Use derivedStateOf for reactive filtering that responds to changes in the 'tasks' list content
-    val filteredTasks by remember {
+    val filteredTasks by remember(tasks, searchQuery, activeFilter) {
         derivedStateOf {
-            tasks.filter { task ->
-                val tokens = searchQuery.split(Regex("[\\s,]+")).filter { it.isNotEmpty() }
-                val matchesSearch = tokens.all { task.title.contains(it, ignoreCase = true) }
-                val matchesStatus = when {
-                    activeFilter.showCompleted && activeFilter.showIncomplete -> true
-                    activeFilter.showCompleted -> task.isCompleted
-                    else -> !task.isCompleted
+            tasks
+                .asSequence()
+                .filter { task ->
+                    val tokens = searchQuery.split(Regex("[\\s,]+")).filter { it.isNotEmpty() }
+                    val matchesSearch = tokens.all { task.title.contains(it, ignoreCase = true) }
+                    val matchesStatus = when {
+                        activeFilter.showCompleted && activeFilter.showIncomplete -> true
+                        activeFilter.showCompleted -> task.isCompleted
+                        else -> !task.isCompleted
+                    }
+                    val matchesDate = activeFilter.selectedDate?.let { nonNullDate ->
+                        val filterDateString = nonNullDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                        task.taskDate == filterDateString
+                    } ?: true
+                    matchesSearch && matchesStatus && matchesDate
                 }
-                val matchesDate = activeFilter.selectedDate?.let { nonNullDate ->
-                    val filterDateString = nonNullDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                    task.taskDate == filterDateString
-                } ?: true
-                matchesSearch && matchesStatus && matchesDate
-            }.sortedWith(compareBy<ImportantTask> { it.isCompleted }.thenBy { it.taskDate })
+                .sortedWith(compareBy<ImportantTask> { it.isCompleted }.thenBy { it.taskDate })
+                .toList()
         }
     }
 
@@ -82,12 +86,15 @@ fun ImportantTasksScreen(
             SearchableTopBar(
                 title = "My Tasks",
                 searchQuery = searchQuery,
-                onQueryChange = { searchQuery = it },
-                onFilterClick = { showFilterSheet = true }
-            )
-            LazyColumn(modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)) {
+                onQueryChange = { searchQuery = it }
+            ) { 
+                showFilterSheet = true 
+            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
                 items(filteredTasks, key = { it.id }) { task ->
                     Card(
                         modifier = Modifier
@@ -162,7 +169,9 @@ fun ImportantTasksScreen(
         FilterBottomSheet(
             isRepetitiveType = false,
             currentFilter = activeFilter,
-            onDismiss = { showFilterSheet = false },
+            onDismiss = { 
+                showFilterSheet = false 
+            },
             onApply = { newFilter ->
                 activeFilter = newFilter
                 showFilterSheet = false
@@ -269,7 +278,7 @@ fun ViewImportantTaskDialog(
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(checked = task.isCompleted, onCheckedChange = { onToggleComplete() }, )
+                    Checkbox(checked = task.isCompleted, onCheckedChange = { onToggleComplete() })
                     Text(text = if (task.isCompleted) "Completed" else "Mark as Completed")
                 }
                 val context = LocalContext.current
@@ -355,7 +364,9 @@ fun AddImportantTaskDialog(
         initialSelectedDateMillis = try {
             LocalDate.parse(reminderDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                 .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        } catch (e: Exception) { System.currentTimeMillis() }
+        } catch (_: Exception) { 
+            System.currentTimeMillis() 
+        }
     )
 
     AlertDialog(
@@ -468,7 +479,7 @@ fun AddImportantTaskDialog(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             
-                            val isDefault = reminderDate == taskDate && reminderTime == taskTime
+                            val isDefault = (reminderDate == taskDate && reminderTime == taskTime)
                             if (!isDefault) {
                                 TextButton(
                                     onClick = {

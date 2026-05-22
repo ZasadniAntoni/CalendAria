@@ -1,5 +1,6 @@
 package com.github.antonizasadni.calendaria.tasks
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.github.antonizasadni.calendaria.completionList.FileManagement
 import com.google.gson.Gson
@@ -48,9 +49,28 @@ data class DailyPlan(
     val notificationsEnabled: Boolean = true
 )
 
+data class Birthday(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val date: String, // Store as "dd.MM" or "dd.MM.yyyy"
+    val notificationsEnabled: Boolean = true,
+    val reminderTime: String = "08:00 AM",
+    val color: Long = 0xFFFFD700 // Gold
+)
+
+data class Note(
+    val id: String = UUID.randomUUID().toString(),
+    val title: String,
+    val content: String,
+    val color: Long,
+    val isPinned: Boolean = false,
+    val lastModified: Long = System.currentTimeMillis()
+)
+
 object TaskManagement {
     private const val PREFS_NAME = "CalendAriaPrefs"
 
+    @SuppressLint("StaticFieldLeak")
     private var repository: DataRepository? = null
 
     private fun getRepo(context: Context): DataRepository {
@@ -225,5 +245,21 @@ object TaskManagement {
             if (it.id == planId) it.copy(isCompleted = !it.isCompleted) else it
         }
         saveDailyPlans(context, currentPlans)
+    }
+
+    fun saveBirthdays(context: Context, birthdays: List<Birthday>) {
+        getRepo(context).saveBirthdays(birthdays)
+    }
+
+    fun loadBirthdays(context: Context): List<Birthday> {
+        return getRepo(context).loadBirthdays()
+    }
+
+    fun saveNotes(context: Context, notes: List<Note>) {
+        getRepo(context).saveNotes(notes)
+    }
+
+    fun loadNotes(context: Context): List<Note> {
+        return getRepo(context).loadNotes()
     }
 }

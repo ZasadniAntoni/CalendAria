@@ -1,4 +1,4 @@
-package com.github.antonizasadni.calendaria.Settings
+package com.github.antonizasadni.calendaria.settings
 
 import android.Manifest
 import android.content.Context
@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.AccessTime
 import android.widget.Toast
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,10 +37,12 @@ import java.util.Calendar
 
 @Composable
 fun SettingsScreen() {
-    var showDebugScreen by remember { mutableStateOf(false) }
+    var showDebugScreen by remember { mutableStateOf(value = false) }
 
     if (showDebugScreen) {
-        DebugSettings(onBack = { showDebugScreen = false })
+        DebugSettings { 
+            showDebugScreen = false 
+        }
     } else {
         MainSettings(onShowDebug = { showDebugScreen = true })
     }

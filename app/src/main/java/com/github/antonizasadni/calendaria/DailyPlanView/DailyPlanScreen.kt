@@ -1,4 +1,4 @@
-package com.github.antonizasadni.calendaria.DailyPlanView
+package com.github.antonizasadni.calendaria.dailyPlanView
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -92,11 +92,11 @@ fun DailyPlanScreen(
     importantTasks: List<ImportantTask>,
     showAddDialog: Boolean,
     onDismissDialog: () -> Unit,
-    onPlansChanged: () -> Unit
+    onPlansChanged: () -> Unit,
 ) {
     val context = LocalContext.current
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(value = false) }
     var planToEdit by remember { mutableStateOf<DailyPlan?>(null) }
     var viewingRepetitive by remember { mutableStateOf<RepetitiveTask?>(null) }
     var viewingImportant by remember { mutableStateOf<ImportantTask?>(null) }
@@ -113,19 +113,27 @@ fun DailyPlanScreen(
             val dateStr = selectedDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
             val dayOfWeek = selectedDate.dayOfWeek.value
 
-            val plans = dailyPlans.filter { it.date == dateStr }.map { UnifiedTask.Plan(it) }
+            val plans = dailyPlans
+                .asSequence()
+                .filter { it.date == dateStr }
+                .map { UnifiedTask.Plan(it) }
+                .toList()
             
             val repetitive = repetitiveTasks
+                .asSequence()
                 .filter { it.selectedDays.contains(dayOfWeek) }
                 .map { task ->
                     val history = FileManagement.loadHistory(context, task.id, selectedDate)
                     val completed = history[selectedDate.dayOfMonth] ?: false
                     UnifiedTask.Repetitive(task, completed)
                 }
+                .toList()
 
             val important = importantTasks
+                .asSequence()
                 .filter { it.taskDate == dateStr }
                 .map { UnifiedTask.Important(it) }
+                .toList()
 
             (plans + repetitive + important)
         }
@@ -234,7 +242,7 @@ fun DailyPlanScreen(
 
             // Layout Logic for Timed Tasks
             val tasksWithLayout = remember(timedTasks) {
-                if (timedTasks.isEmpty()) return@remember emptyList<Triple<UnifiedTask, Int, Int>>()
+                if (timedTasks.isEmpty()) return@remember emptyList()
 
                 val sorted = timedTasks.map { task ->
                     val start = TaskManagement.parseTimeToMinutes(task.time)
@@ -324,7 +332,7 @@ fun DailyPlanScreen(
                             modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (totalColumns <= 2 || itemWidth > 60.dp) {
+                            if ((totalColumns <= 2) || (itemWidth > 60.dp)) {
                                 Checkbox(
                                     checked = task.isCompleted,
                                     onCheckedChange = {
@@ -369,16 +377,20 @@ fun DailyPlanScreen(
 
     if (showDatePicker) {
         DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
+            onDismissRequest = { 
+                showDatePicker = false 
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        selectedDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            selectedDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                        }
+                        showDatePicker = false
                     }
-                    showDatePicker = false
-                }) { Text("OK") }
+                ) { Text("OK") }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }

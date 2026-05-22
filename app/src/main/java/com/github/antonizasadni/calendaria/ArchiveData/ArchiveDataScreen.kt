@@ -1,6 +1,5 @@
-package com.github.antonizasadni.calendaria.ArchiveData
+package com.github.antonizasadni.calendaria.archiveData
 
-import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
@@ -13,8 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Sync
-import androidx.core.net.toUri
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,15 +150,19 @@ fun ArchiveDataScreen() {
         )
 
         // RESTORE FROM ZIP
-        Button(
-            onClick = { importLauncher.launch(arrayOf("application/zip")) },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Restore from .zip Backup")
+        if (isImporting) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else {
+            Button(
+                onClick = { importLauncher.launch(arrayOf("application/zip")) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Restore from .zip Backup")
+            }
         }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -189,13 +189,13 @@ fun ArchiveDataScreen() {
 fun OutlinedTextField(
     value: String,
     onValueChange: (String) -> Unit,
-    label: @Composable (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    label: @Composable (() -> Unit)? = null,
     leadingIcon: @Composable (() -> Unit)? = null,
     placeholder: @Composable (() -> Unit)? = null,
     helperText: @Composable (() -> Unit)? = null
 ) {
-    androidx.compose.material3.OutlinedTextField(
+    OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = label,

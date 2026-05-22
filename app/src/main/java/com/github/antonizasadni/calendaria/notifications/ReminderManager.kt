@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import com.github.antonizasadni.calendaria.tasks.Birthday
 import com.github.antonizasadni.calendaria.tasks.DailyPlan
 import com.github.antonizasadni.calendaria.tasks.ImportantTask
 import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
@@ -20,12 +21,14 @@ object ReminderManager {
     private const val IMPORTANT_TASK_BASE_ID = 2000
     private const val REPETITIVE_TASK_BASE_ID = 3000
     private const val DAILY_PLAN_BASE_ID = 4000
+    private const val BIRTHDAY_BASE_ID = 5000
 
     fun scheduleReminders(context: Context) {
         scheduleWeeklyReminders(context)
         scheduleAllImportantTasks(context)
         scheduleAllRepetitiveTasks(context)
         scheduleAllDailyPlans(context)
+        scheduleAllBirthdays(context)
     }
 
     private fun scheduleWeeklyReminders(context: Context) {
@@ -258,6 +261,82 @@ object ReminderManager {
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             DAILY_PLAN_BASE_ID + plan.id.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+    }
+
+    fun scheduleAllBirthdays(context: Context) {
+        val birthdays = TaskManagement.loadBirthdays(context)
+        birthdays.forEach { birthday ->
+            scheduleBirthday(context, birthday)
+        }
+    }
+
+    fun scheduleBirthday(context: Context, birthday: Birthday) {
+        if (!birthday.notificationsEnabled) {
+            cancelBirthday(context, birthday)
+            return
+        }
+
+        try {
+            val birthDate = try {
+                LocalDate.parse(birthday.date)
+            } catch (_: Exception) {
+                LocalDate.now() 
+            }
+            
+            val today = LocalDate.now()
+            val now = LocalDateTime.now()
+            val p = parseTime(birthday.reminderTime)
+            val reminderTimeToday = LocalTime.of(p.first, p.second)
+            
+            var nextBirthdayDate = birthDate.withYear(today.year)
+            var triggerDateTime = LocalDateTime.of(nextBirthdayDate, reminderTimeToday)
+
+            // If the reminder time for today has already passed, schedule for next year
+            if (triggerDateTime.isBefore(now)) {
+                nextBirthdayDate = nextBirthdayDate.plusYears(1)
+                triggerDateTime = LocalDateTime.of(nextBirthdayDate, reminderTimeToday)
+            }
+
+            val triggerTime = triggerDateTime
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, ReminderReceiver::class.java).apply {
+                putExtra("type", "birthday")
+                putExtra("task_id", birthday.id)
+                putExtra("task_title", "It's ${birthday.name}'s Birthday! 🎂")
+                val age = if (birthDate.year < today.year) {
+                    val currentAge = nextBirthdayDate.year - birthDate.year
+                    "Turning $currentAge today."
+                } else ""
+                putExtra("task_desc", age)
+            }
+            
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                BIRTHDAY_BASE_ID + birthday.id.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            setAlarm(alarmManager, triggerTime, pendingIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun cancelBirthday(context: Context, birthday: Birthday) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, ReminderReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            BIRTHDAY_BASE_ID + birthday.id.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

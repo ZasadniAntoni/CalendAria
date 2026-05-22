@@ -8,20 +8,22 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.github.antonizasadni.calendaria.tasks.Birthday
 import com.github.antonizasadni.calendaria.tasks.ImportantTask
 import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
@@ -35,11 +37,11 @@ import java.util.Locale
 fun CalendarScreen(
     month: Int,
     year: Int,
-    today: LocalDate,
     repetitiveTasks: List<RepetitiveTask>,
     importantTasks: List<ImportantTask>,
+    birthdays: List<Birthday>,
     onMonthYearChange: (Int, Int) -> Unit,
-    onTasksChanged: () -> Unit
+    onTasksChanged: () -> Unit,
 ) {
     val context = LocalContext.current
     val yearMonth = remember(month, year) { YearMonth.of(year, month) }
@@ -62,8 +64,11 @@ fun CalendarScreen(
             date = selectedDate!!,
             repetitiveTasks = repetitiveTasks,
             importantTasks = importantTasks,
-            onBack = { selectedDate = null },
-            onTasksChanged = onTasksChanged
+            birthdays = birthdays,
+            onBack = { 
+                selectedDate = null 
+            },
+            onTasksChanged = onTasksChanged,
         )
     } else {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -73,14 +78,16 @@ fun CalendarScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = {
-                        val prev = yearMonth.minusMonths(1)
-                        onMonthYearChange(prev.monthValue, prev.year)
-                    }) {
-                        Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null)
+                    IconButton(
+                        onClick = {
+                            val prev = yearMonth.minusMonths(1)
+                            onMonthYearChange(prev.monthValue, prev.year)
+                        },
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null)
                     }
 
-                    val isCurrentMonth = month == currentToday.monthValue && year == currentToday.year
+                    val isCurrentMonth = (month == currentToday.monthValue && year == currentToday.year)
 
                     TextButton(
                         onClick = { onMonthYearChange(currentToday.monthValue, currentToday.year) },
@@ -93,11 +100,13 @@ fun CalendarScreen(
                         )
                     }
 
-                    IconButton(onClick = {
-                        val next = yearMonth.plusMonths(1)
-                        onMonthYearChange(next.monthValue, next.year)
-                    }) {
-                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = null)
+                    IconButton(
+                        onClick = {
+                            val next = yearMonth.plusMonths(1)
+                            onMonthYearChange(next.monthValue, next.year)
+                        },
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                     }
                 }
 
@@ -126,31 +135,50 @@ fun CalendarScreen(
                     val dateStr = date.format(dateFormatter)
                     val dRepetitive = repetitiveTasks.filter { TaskManagement.isTaskActiveOnDate(it, date) }
                     val dImportant = importantTasks.filter { it.taskDate == dateStr }
+                    val dBirthdays = birthdays.filter { 
+                        try {
+                            val bd = LocalDate.parse(it.date)
+                            bd.dayOfMonth == date.dayOfMonth && bd.monthValue == date.monthValue
+                        } catch (_: Exception) { 
+                            false 
+                        }
+                    }
                     val isToday = dayNum == currentToday.dayOfMonth && month == currentToday.monthValue && year == currentToday.year
 
                     Card(
                         modifier = Modifier.padding(2.dp).clickable { selectedDate = date },
                         colors = when {
                             isToday -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            dBirthdays.isNotEmpty() -> CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.3f))
                             dImportant.isNotEmpty() -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
                             dRepetitive.isNotEmpty() -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                             else -> CardDefaults.cardColors()
                         }
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(4.dp).fillMaxWidth()
-                        ) {
-                            Text(text = dayNum.toString(), textAlign = TextAlign.Center, fontSize = 14.sp)
-                            Row(
-                                modifier = Modifier.padding(top = 2.dp),
-                                horizontalArrangement = Arrangement.Center
+                        Box(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+                            if (dBirthdays.isNotEmpty()) {
+                                Text(
+                                    text = "🎂",
+                                    fontSize = 8.sp,
+                                    modifier = Modifier.align(Alignment.TopEnd)
+                                )
+                            }
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                dImportant.take(2).forEach { _ ->
-                                    Box(Modifier.padding(horizontal = 1.dp).size(4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
-                                }
-                                dRepetitive.take(3 - dImportant.size.coerceAtMost(2)).forEach { _ ->
-                                    Box(Modifier.padding(horizontal = 1.dp).size(4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                                Text(text = dayNum.toString(), textAlign = TextAlign.Center, fontSize = 14.sp)
+                                Row(
+                                    modifier = Modifier.padding(top = 2.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    dImportant.take(2).forEach { _ ->
+                                        Box(Modifier.padding(horizontal = 1.dp).size(4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
+                                    }
+                                    dRepetitive.take(3 - dImportant.size.coerceAtMost(2)).forEach { _ ->
+                                        Box(Modifier.padding(horizontal = 1.dp).size(4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                                    }
                                 }
                             }
                         }
@@ -163,15 +191,18 @@ fun CalendarScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             val todaysRepetitive = repetitiveTasks
+                .asSequence()
                 .filter { it.selectedDays.contains(currentToday.dayOfWeek.value) }
                 .map { task ->
                     val history = FileManagement.loadHistory(context, task.id, currentToday)
                     val isCompletedInHistory = history[currentToday.dayOfMonth] ?: false
                     task to isCompletedInHistory
                 }
-                .sortedWith(compareBy<Pair<RepetitiveTask, Boolean>> { it.second }
-                    .thenBy { TaskManagement.parseTimeToMinutes(it.first.time) }
+                .sortedWith(
+                    compareBy<Pair<RepetitiveTask, Boolean>> { it.second }
+                        .thenBy { TaskManagement.parseTimeToMinutes(it.first.time) }
                 )
+                .toList()
 
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),

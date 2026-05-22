@@ -4,8 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.antonizasadni.calendaria.importantView.AddImportantTaskDialog
 import com.github.antonizasadni.calendaria.repetitiveView.AddRepetitiveTaskDialog
+import com.github.antonizasadni.calendaria.tasks.Birthday
 import com.github.antonizasadni.calendaria.tasks.ImportantTask
 import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
@@ -36,6 +37,7 @@ fun DayScreen(
     date: LocalDate,
     repetitiveTasks: List<RepetitiveTask>,
     importantTasks: List<ImportantTask>,
+    birthdays: List<Birthday>,
     onBack: () -> Unit,
     onTasksChanged: () -> Unit
 ) {
@@ -53,6 +55,13 @@ fun DayScreen(
     var viewingImportant by remember { mutableStateOf<ImportantTask?>(null) }
     var editingImportant by remember { mutableStateOf<ImportantTask?>(null) }
     var importantToDelete by remember { mutableStateOf<ImportantTask?>(null) }
+
+    val filteredBirthdays = birthdays.filter { 
+        try {
+            val bd = LocalDate.parse(it.date)
+            bd.dayOfMonth == date.dayOfMonth && bd.monthValue == date.monthValue
+        } catch (e: Exception) { false }
+    }
 
     val filteredRepetitive = repetitiveTasks
         .filter { it.selectedDays.contains(dayOfWeek) }
@@ -79,7 +88,7 @@ fun DayScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -91,16 +100,56 @@ fun DayScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            if (filteredRepetitive.isEmpty() && filteredImportant.isEmpty()) {
+            if (filteredRepetitive.isEmpty() && filteredImportant.isEmpty() && filteredBirthdays.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No tasks for this day", color = MaterialTheme.colorScheme.outline)
+                    Text("No events for this day", color = MaterialTheme.colorScheme.outline)
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 16.dp)
+                    contentPadding = PaddingValues(vertical = 16.dp),
                 ) {
+                    items(filteredBirthdays, key = { "bd_${it.id}" }) { birthday ->
+                        val birthDate = try { LocalDate.parse(birthday.date) } catch (_: Exception) { LocalDate.now() }
+                        val age = if (birthDate.year < date.year) date.year - birthDate.year else -1
+                        
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.2f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD700))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🎂", fontSize = 24.sp)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column {
+                                    Text(
+                                        text = "${birthday.name}'s Birthday",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    if (age > 0) {
+                                        Text(
+                                            text = "Turning $age today!",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                    if (birthday.notificationsEnabled) {
+                                        Text(
+                                            text = "Reminder: ${TaskManagement.formatTime(context, birthday.reminderTime)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     items(filteredImportant, key = { "imp_${it.id}" }) { task ->
                         val completed = task.isCompleted
                         Card(
@@ -221,7 +270,9 @@ fun DayScreen(
         ViewRepetitiveTaskDialog(
             task = viewingRepetitive!!,
             date = if (isToday) date else null,
-            onDismiss = { viewingRepetitive = null },
+            onDismiss = { 
+                viewingRepetitive = null 
+            },
             onEdit = {
                 editingRepetitive = viewingRepetitive
                 viewingRepetitive = null

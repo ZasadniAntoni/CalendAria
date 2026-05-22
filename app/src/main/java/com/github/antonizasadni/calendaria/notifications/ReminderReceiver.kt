@@ -19,7 +19,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val type = intent.getStringExtra("type") ?: "both"
 
         when (type) {
-            "important", "habit", "plan" -> {
+            "important", "habit", "plan", "birthday" -> {
                 val title = intent.getStringExtra("task_title") ?: "Pending Task"
                 val desc = intent.getStringExtra("task_desc") ?: ""
                 NotificationHelper.showNotification(context, title, desc)

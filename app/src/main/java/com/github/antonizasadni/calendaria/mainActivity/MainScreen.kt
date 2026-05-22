@@ -9,15 +9,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,11 +24,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.github.antonizasadni.calendaria.ArchiveData.ArchiveDataScreen
-import com.github.antonizasadni.calendaria.DailyPlanView.DailyPlanScreen
-import com.github.antonizasadni.calendaria.Settings.SettingsScreen
+import com.github.antonizasadni.calendaria.archiveData.ArchiveDataScreen
+import com.github.antonizasadni.calendaria.dailyPlanView.DailyPlanScreen
+import com.github.antonizasadni.calendaria.settings.SettingsScreen
 import com.github.antonizasadni.calendaria.calendarView.CalendarScreen
 import com.github.antonizasadni.calendaria.completionList.CompletionListScreen
+import com.github.antonizasadni.calendaria.birthdayView.BirthdayScreen
+import com.github.antonizasadni.calendaria.birthdayView.AddOrEditBirthdayDialog
+import com.github.antonizasadni.calendaria.notesView.NotesScreen
 import com.github.antonizasadni.calendaria.importantView.ImportantTasksScreen
 import com.github.antonizasadni.calendaria.importantView.AddImportantTaskDialog
 import com.github.antonizasadni.calendaria.repetitiveView.RepetitiveTasksScreen
@@ -41,8 +40,10 @@ import com.github.antonizasadni.calendaria.tasks.ImportantTask
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
 import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
 import com.github.antonizasadni.calendaria.tasks.DailyPlan
+import com.github.antonizasadni.calendaria.tasks.Birthday
+import com.github.antonizasadni.calendaria.tasks.Note
 import com.github.antonizasadni.calendaria.R
-import java.time.LocalDate
+import androidx.compose.material.icons.filled.Cake
 
 @Composable
 fun NavigationHost(
@@ -50,20 +51,36 @@ fun NavigationHost(
     repetitiveTasks: MutableList<RepetitiveTask>,
     importantTasks: MutableList<ImportantTask>,
     dailyPlans: MutableList<DailyPlan>,
+    birthdays: MutableList<Birthday>,
+    notes: MutableList<Note>,
     selectedMonth: Int,
     selectedYear: Int,
-    today: LocalDate,
     showAddTaskDialog: Boolean,
     onDismissDialog: () -> Unit,
     onMonthYearChange: (Int, Int) -> Unit,
-    onTasksChanged: () -> Unit
+    onTasksChanged: () -> Unit,
 ) {
     when (currentScreen) {
-        "calendar" -> CalendarScreen(selectedMonth, selectedYear, today, repetitiveTasks, importantTasks, onMonthYearChange, onTasksChanged)
+        "calendar" -> CalendarScreen(
+            month = selectedMonth,
+            year = selectedYear,
+            repetitiveTasks = repetitiveTasks,
+            importantTasks = importantTasks,
+            birthdays = birthdays,
+            onMonthYearChange = onMonthYearChange,
+            onTasksChanged = onTasksChanged
+        )
         "important" -> ImportantTasksScreen(importantTasks, onTasksChanged)
         "repetitive" -> RepetitiveTasksScreen(repetitiveTasks, onTasksChanged)
         "completion" -> CompletionListScreen(repetitiveTasks, onTasksChanged)
         "dailyPlan" -> DailyPlanScreen(dailyPlans, repetitiveTasks, importantTasks, showAddTaskDialog, onDismissDialog, onTasksChanged)
+        "birthdays" -> BirthdayScreen(birthdays, onTasksChanged)
+        "notes" -> NotesScreen(
+            notes = notes,
+            showAddNote = showAddTaskDialog,
+            onDismissAdd = onDismissDialog,
+            onNotesChanged = onTasksChanged
+        )
         "archive" -> ArchiveDataScreen()
         "options" -> SettingsScreen()
     }
@@ -86,6 +103,8 @@ fun AppScaffold(
                 "important" -> "Important" to Icons.Default.Warning
                 "repetitive" -> "Repetitive" to Icons.Default.Refresh
                 "completion" -> "Completion" to Icons.Default.CheckCircle
+                "birthdays" -> "Birthdays" to Icons.Default.Cake
+                "notes" -> "Notes" to Icons.Default.Edit
                 "archive" -> "Archive" to Icons.Default.Share
                 "options" -> "Settings" to Icons.Default.Settings
                 else -> currentScreen.replaceFirstChar { it.uppercase() } to null
@@ -105,7 +124,7 @@ fun AppScaffold(
             )
         },
         floatingActionButton = {
-            if (currentScreen == "repetitive" || currentScreen == "important" || currentScreen == "dailyPlan") {
+            if ((currentScreen == "repetitive") || (currentScreen == "important") || (currentScreen == "dailyPlan") || (currentScreen == "birthdays") || (currentScreen == "notes")) {
                 FloatingActionButton(onClick = onFabClick) { Icon(Icons.Default.Add, null) }
             }
         },
@@ -159,7 +178,9 @@ fun AppDrawerContent(currentScreen: String, onNavigate: (String) -> Unit) {
             Triple("important", "Important Tasks", Icons.Default.Warning),
             Triple("repetitive", "Repetitive Tasks", Icons.Default.Refresh),
             Triple("completion", "Completion List", Icons.Default.CheckCircle),
-            Triple("dailyPlan", "Daily Plan", Icons.Default.Edit)
+            Triple("dailyPlan", "Daily Plan", Icons.Default.Edit),
+            Triple("birthdays", "Birthdays", Icons.Default.Cake),
+            Triple("notes", "Notes", Icons.Default.Edit)
         )
 
         navItems.forEach { (route, displayName, icon) ->
@@ -224,6 +245,15 @@ fun TaskDialogHandler(
                 tasks.add(newTask)
                 TaskManagement.saveImportantTasks(context, tasks)
                 onTaskCreated(newTask)
+            }
+        )
+        "birthdays" -> AddOrEditBirthdayDialog(
+            onDismiss = onDismiss,
+            onConfirm = { newBirthday ->
+                val birthdays = TaskManagement.loadBirthdays(context).toMutableList()
+                birthdays.add(newBirthday)
+                TaskManagement.saveBirthdays(context, birthdays)
+                onTaskCreated(newBirthday)
             }
         )
     }

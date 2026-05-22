@@ -24,6 +24,8 @@ class DataRepository(private val context: Context) {
     private val REPETITIVE_FILE = "repetitive_tasks_v2.json"
     private val IMPORTANT_FILE = "important_tasks_v2.json"
     private val DAILY_PLAN_FILE = "daily_plans_v2.json"
+    private val BIRTHDAY_FILE = "birthdays_v2.json"
+    private val NOTE_FILE = "notes_v2.json"
 
     // --- MIGRATION LOGIC ---
     
@@ -207,6 +209,26 @@ class DataRepository(private val context: Context) {
         saveList(DAILY_PLAN_FILE, plans)
     }
 
+    // --- BIRTHDAYS ---
+
+    fun loadBirthdays(): List<Birthday> {
+        return loadList(BIRTHDAY_FILE, object : TypeToken<List<Birthday>>() {}.type)
+    }
+
+    fun saveBirthdays(birthdays: List<Birthday>) {
+        saveList(BIRTHDAY_FILE, birthdays)
+    }
+
+    // --- NOTES ---
+
+    fun loadNotes(): List<Note> {
+        return loadList(NOTE_FILE, object : TypeToken<List<Note>>() {}.type)
+    }
+
+    fun saveNotes(notes: List<Note>) {
+        saveList(NOTE_FILE, notes)
+    }
+
     /**
      * Wipes all task data and history from the device.
      */
@@ -215,6 +237,8 @@ class DataRepository(private val context: Context) {
         File(context.filesDir, REPETITIVE_FILE).delete()
         File(context.filesDir, IMPORTANT_FILE).delete()
         File(context.filesDir, DAILY_PLAN_FILE).delete()
+        File(context.filesDir, BIRTHDAY_FILE).delete()
+        File(context.filesDir, NOTE_FILE).delete()
 
         // 2. Delete all Task-Specific Folders and Archives
         context.filesDir.listFiles()?.forEach { file ->

@@ -59,30 +59,34 @@ import android.content.Context
 @Composable
 fun RepetitiveTasksScreen(
     tasks: MutableList<RepetitiveTask>,
-    onTasksChanged: () -> Unit
+    onTasksChanged: () -> Unit,
 ) {
     val context = LocalContext.current
     var viewingTask by remember { mutableStateOf<RepetitiveTask?>(null) }
     var editingTask by remember { mutableStateOf<RepetitiveTask?>(null) }
     var taskToDelete by remember { mutableStateOf<RepetitiveTask?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var showFilterSheet by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(value = false) }
     var activeFilter by remember { mutableStateOf(TaskFilter()) }
 
-    val filteredTasks by remember {
+    val filteredTasks by remember(tasks, searchQuery, activeFilter) {
         derivedStateOf {
-            tasks.filter { task ->
-                val tokens = searchQuery.split(Regex("[\\s,]+")).filter { it.isNotEmpty() }
-                val matchesSearch = tokens.all { task.title.contains(it, ignoreCase = true) }
-                val matchesStatus = when {
-                    activeFilter.showCompleted && activeFilter.showIncomplete -> true
-                    activeFilter.showCompleted -> task.isCompleted
-                    else -> !task.isCompleted
+            tasks
+                .asSequence()
+                .filter { task ->
+                    val tokens = searchQuery.split(Regex("[\\s,]+")).filter { it.isNotEmpty() }
+                    val matchesSearch = tokens.all { task.title.contains(it, ignoreCase = true) }
+                    val matchesStatus = when {
+                        activeFilter.showCompleted && activeFilter.showIncomplete -> true
+                        activeFilter.showCompleted -> task.isCompleted
+                        else -> !task.isCompleted
+                    }
+                    val matchesDays = activeFilter.selectedDays.isEmpty() ||
+                            activeFilter.selectedDays.any { task.selectedDays.contains(it) }
+                    matchesSearch && matchesStatus && matchesDays
                 }
-                val matchesDays = activeFilter.selectedDays.isEmpty() ||
-                        activeFilter.selectedDays.any { task.selectedDays.contains(it) }
-                matchesSearch && matchesStatus && matchesDays
-            }.sortedBy { it.isCompleted }
+                .sortedBy { it.isCompleted }
+                .toList()
         }
     }
 
@@ -153,7 +157,9 @@ fun RepetitiveTasksScreen(
         FilterBottomSheet(
             isRepetitiveType = true,
             currentFilter = activeFilter,
-            onDismiss = { showFilterSheet = false },
+            onDismiss = { 
+                showFilterSheet = false 
+            },
             onApply = { newFilter ->
                 activeFilter = newFilter
                 showFilterSheet = false
@@ -323,7 +329,9 @@ fun AddRepetitiveTaskDialog(
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = try {
             LocalDate.parse(createdAt).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        } catch (e: Exception) { System.currentTimeMillis() }
+        } catch (_: Exception) { 
+            System.currentTimeMillis() 
+        }
     )
 
     AlertDialog(
