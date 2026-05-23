@@ -60,7 +60,6 @@ data class Birthday(
 
 data class Note(
     val id: String = UUID.randomUUID().toString(),
-    val title: String,
     val content: String,
     val color: Long,
     val isPinned: Boolean = false,

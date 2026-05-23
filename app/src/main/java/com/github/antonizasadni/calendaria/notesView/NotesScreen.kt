@@ -26,7 +26,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.github.antonizasadni.calendaria.R
@@ -42,29 +41,30 @@ fun NotesScreen(
     showAddNote: Boolean,
     onDismissAdd: () -> Unit,
     onNotesChanged: () -> Unit,
+    onFabVisibilityChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var fullScreenNote by remember { mutableStateOf<Note?>(null) }
 
-    // Logic for new note creation
     val colorResIds = listOf(
         R.color.plan_pink, R.color.plan_orange, R.color.plan_brown,
         R.color.plan_grey, R.color.plan_purple, R.color.plan_teal, R.color.plan_green
     )
     val defaultColor = colorResource(colorResIds[3]).toArgb().toLong()
 
-    val newNotePlaceholder = remember(showAddNote) {
-        if (showAddNote) {
-            Note(id = UUID.randomUUID().toString(), title = "", content = "", color = defaultColor)
-        } else null
-    }
+    val activeNote = fullScreenNote ?: if (showAddNote) {
+        remember { Note(id = UUID.randomUUID().toString(), content = "", color = defaultColor) }
+    } else null
 
-    val activeNote = fullScreenNote ?: newNotePlaceholder
+    LaunchedEffect(activeNote) {
+        onFabVisibilityChange(activeNote == null)
+    }
 
     if (activeNote != null) {
         SingleNoteScreen(
             note = activeNote,
+            startInEditMode = showAddNote || activeNote.content.isEmpty(),
             onBack = { 
                 fullScreenNote = null
                 onDismissAdd()
@@ -74,16 +74,11 @@ fun NotesScreen(
                 if (index != -1) {
                     notes[index] = updatedNote
                 } else {
-                    // Only add if there is actually some content or title, 
-                    // or if it's explicitly saved. 
-                    // To match Google Keep, we usually save even if empty and then cleanup, 
-                    // but let's just add it.
                     notes.add(updatedNote)
                 }
                 TaskManagement.saveNotes(context, notes)
                 onNotesChanged()
                 
-                // If it was a new note, we update fullScreenNote to it so it stops being "new"
                 if (fullScreenNote == null) {
                     fullScreenNote = updatedNote
                 }
@@ -104,7 +99,6 @@ fun NotesScreen(
             notes
                 .asSequence()
                 .filter { 
-                    it.title.contains(searchQuery, ignoreCase = true) || 
                     it.content.contains(searchQuery, ignoreCase = true) 
                 }
                 .sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { it.lastModified })
@@ -183,16 +177,6 @@ fun NoteItem(
         border = BorderStroke(1.dp, Color(note.color).copy(alpha = 0.6f))
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            if (note.title.isNotBlank()) {
-                Text(
-                    text = note.title,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
             Text(
                 text = MarkdownParser.parse(note.content),
                 maxLines = 10,
@@ -207,14 +191,15 @@ fun NoteItem(
 @Composable
 fun SingleNoteScreen(
     note: Note,
+    startInEditMode: Boolean,
     onBack: () -> Unit,
     onSave: (Note) -> Unit,
     onDelete: () -> Unit
 ) {
-    var isEditMode by remember { mutableStateOf(note.id.isEmpty()) }
-    var title by remember { mutableStateOf(note.title) }
+    var isEditMode by remember { mutableStateOf(startInEditMode) }
     var content by remember { mutableStateOf(note.content) }
     var isPinned by remember { mutableStateOf(note.isPinned) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     
     val colorResIds = listOf(
         R.color.plan_pink, R.color.plan_orange, R.color.plan_brown,
@@ -223,13 +208,12 @@ fun SingleNoteScreen(
     val colors = colorResIds.map { colorResource(it).toArgb().toLong() }
     var selectedColor by remember { mutableLongStateOf(note.color) }
 
-    LaunchedEffect(title, content, selectedColor, isPinned) {
-        if (title == note.title && content == note.content && 
+    LaunchedEffect(content, selectedColor, isPinned) {
+        if (content == note.content && 
             selectedColor == note.color && isPinned == note.isPinned) return@LaunchedEffect
         
         delay(500) // 500ms debounce
         onSave(note.copy(
-            title = title, 
             content = content, 
             color = selectedColor, 
             isPinned = isPinned, 
@@ -244,7 +228,7 @@ fun SingleNoteScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         if (isEditMode) {
-                            onSave(note.copy(title = title, content = content, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
+                            onSave(note.copy(content = content, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
                         }
                         onBack()
                     }) {
@@ -259,18 +243,7 @@ fun SingleNoteScreen(
                             tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                     }
-                    IconButton(onClick = { 
-                        if (isEditMode) {
-                            onSave(note.copy(title = title, content = content, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
-                        }
-                        isEditMode = !isEditMode 
-                    }) {
-                        Icon(
-                            imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
-                            contentDescription = "Toggle Edit"
-                        )
-                    }
-                    IconButton(onClick = onDelete) {
+                    IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                     }
                 },
@@ -278,6 +251,23 @@ fun SingleNoteScreen(
                     containerColor = Color(selectedColor).copy(alpha = 0.6f)
                 )
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { 
+                    if (isEditMode) {
+                        onSave(note.copy(content = content, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
+                    }
+                    isEditMode = !isEditMode 
+                },
+                containerColor = if (isEditMode) Color(0xFF4CAF50) else MaterialTheme.colorScheme.secondary,
+            ) {
+                Icon(
+                    imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
+                    contentDescription = "Toggle Edit",
+                    tint = Color.White
+                )
+            }
         },
         bottomBar = {
             if (isEditMode) {
@@ -325,24 +315,9 @@ fun SingleNoteScreen(
         ) {
             if (isEditMode) {
                 TextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    placeholder = { Text("Title", style = MaterialTheme.typography.headlineSmall) },
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.headlineSmall,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    )
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                TextField(
                     value = content,
                     onValueChange = { content = it },
-                    placeholder = { Text("Note") },
+                    placeholder = { Text("Note content") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
@@ -353,15 +328,6 @@ fun SingleNoteScreen(
                     )
                 )
             } else {
-                if (title.isNotBlank()) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-                
                 val annotatedString = MarkdownParser.parse(content)
                 var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
@@ -397,5 +363,29 @@ fun SingleNoteScreen(
                 )
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Note") },
+            text = { Text("Are you sure you want to permanently delete this note?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

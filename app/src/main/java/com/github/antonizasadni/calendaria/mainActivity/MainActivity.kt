@@ -80,6 +80,7 @@ fun CalendAriaApp() {
     var selectedMonth by remember { mutableIntStateOf(today.monthValue) }
     var selectedYear by remember { mutableIntStateOf(today.year) }
     var showAddTaskDialog by remember { mutableStateOf(value = false) }
+    var isAppFabVisible by remember { mutableStateOf(value = true) }
 
     val repetitiveTasks = remember {
         mutableStateListOf<RepetitiveTask>().apply {
@@ -127,18 +128,20 @@ fun CalendAriaApp() {
                 currentScreen = currentScreen,
             ) { screen ->
                 currentScreen = screen
+                isAppFabVisible = true // Reset on navigate
                 scope.launch { drawerState.close() }
             }
         }
     ) {
         AppScaffold(
             currentScreen = currentScreen,
+            showFab = isAppFabVisible,
             onMenuClick = { scope.launch { drawerState.open() } },
             onTodayClick = {
                 selectedMonth = today.monthValue
                 selectedYear = today.year
             },
-            onFabClick = { showAddTaskDialog = true }
+            onFabClick = { showAddTaskDialog = true },
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
                 NavigationHost(
@@ -153,8 +156,9 @@ fun CalendAriaApp() {
                     showAddTaskDialog = showAddTaskDialog,
                     onDismissDialog = { showAddTaskDialog = false },
                     onMonthYearChange = { m, y -> selectedMonth = m; selectedYear = y },
-                ) {
-                    refreshTasks()
+                    onTasksChanged = { refreshTasks() },
+                ) { isVisible ->
+                    isAppFabVisible = isVisible
                 }
             }
         }
@@ -164,10 +168,9 @@ fun CalendAriaApp() {
         TaskDialogHandler(
             currentScreen = currentScreen,
             onDismiss = { showAddTaskDialog = false },
-            onTaskCreated = {
-                refreshTasks()
-                showAddTaskDialog = false
-            }
-        )
+        ) {
+            refreshTasks()
+            showAddTaskDialog = false
+        }
     }
 }

@@ -59,6 +59,7 @@ fun NavigationHost(
     onDismissDialog: () -> Unit,
     onMonthYearChange: (Int, Int) -> Unit,
     onTasksChanged: () -> Unit,
+    onFabVisibilityChange: (Boolean) -> Unit
 ) {
     when (currentScreen) {
         "calendar" -> CalendarScreen(
@@ -79,7 +80,8 @@ fun NavigationHost(
             notes = notes,
             showAddNote = showAddTaskDialog,
             onDismissAdd = onDismissDialog,
-            onNotesChanged = onTasksChanged
+            onNotesChanged = onTasksChanged,
+            onFabVisibilityChange = onFabVisibilityChange
         )
         "archive" -> ArchiveDataScreen()
         "options" -> SettingsScreen()
@@ -90,6 +92,7 @@ fun NavigationHost(
 @Composable
 fun AppScaffold(
     currentScreen: String,
+    showFab: Boolean,
     onMenuClick: () -> Unit,
     onTodayClick: () -> Unit,
     onFabClick: () -> Unit,
@@ -124,7 +127,7 @@ fun AppScaffold(
             )
         },
         floatingActionButton = {
-            if ((currentScreen == "repetitive") || (currentScreen == "important") || (currentScreen == "dailyPlan") || (currentScreen == "birthdays") || (currentScreen == "notes")) {
+            if (showFab && ((currentScreen == "repetitive") || (currentScreen == "important") || (currentScreen == "dailyPlan") || (currentScreen == "birthdays") || (currentScreen == "notes"))) {
                 FloatingActionButton(onClick = onFabClick) { Icon(Icons.Default.Add, null) }
             }
         },
