@@ -1,5 +1,6 @@
 package com.github.antonizasadni.calendaria.notesView
 
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +35,10 @@ import com.github.antonizasadni.calendaria.tasks.SearchableTopBar
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
 import kotlinx.coroutines.delay
 import java.util.UUID
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.animation.core.tween
 
 @Composable
 fun NotesScreen(
@@ -62,35 +67,46 @@ fun NotesScreen(
     }
 
     if (activeNote != null) {
-        SingleNoteScreen(
-            note = activeNote,
-            startInEditMode = showAddNote || activeNote.content.isEmpty(),
-            onBack = { 
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { 
                 fullScreenNote = null
                 onDismissAdd()
             },
-            onSave = { updatedNote ->
-                val index = notes.indexOfFirst { it.id == updatedNote.id }
-                if (index != -1) {
-                    notes[index] = updatedNote
-                } else {
-                    notes.add(updatedNote)
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            SingleNoteScreen(
+                note = activeNote,
+                startInEditMode = showAddNote || activeNote.content.isEmpty(),
+                onBack = { 
+                    fullScreenNote = null
+                    onDismissAdd()
+                },
+                onSave = { updatedNote ->
+                    val index = notes.indexOfFirst { it.id == updatedNote.id }
+                    if (index != -1) {
+                        notes[index] = updatedNote
+                    } else {
+                        notes.add(updatedNote)
+                    }
+                    TaskManagement.saveNotes(context, notes)
+                    onNotesChanged()
+                    
+                    if (fullScreenNote == null) {
+                        fullScreenNote = updatedNote
+                    }
+                },
+                onDelete = {
+                    notes.removeIf { it.id == activeNote.id }
+                    TaskManagement.saveNotes(context, notes)
+                    onNotesChanged()
+                    fullScreenNote = null
+                    onDismissAdd()
                 }
-                TaskManagement.saveNotes(context, notes)
-                onNotesChanged()
-                
-                if (fullScreenNote == null) {
-                    fullScreenNote = updatedNote
-                }
-            },
-            onDelete = {
-                notes.removeIf { it.id == activeNote.id }
-                TaskManagement.saveNotes(context, notes)
-                onNotesChanged()
-                fullScreenNote = null
-                onDismissAdd()
-            }
-        )
+            )
+        }
         return
     }
 
@@ -197,9 +213,10 @@ fun SingleNoteScreen(
     onDelete: () -> Unit
 ) {
     var isEditMode by remember { mutableStateOf(startInEditMode) }
-    var content by remember { mutableStateOf(note.content) }
+    var contentValue by remember { mutableStateOf(TextFieldValue(note.content)) }
     var isPinned by remember { mutableStateOf(note.isPinned) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var isMenuExpanded by remember { mutableStateOf(false) }
     
     val colorResIds = listOf(
         R.color.plan_pink, R.color.plan_orange, R.color.plan_brown,
@@ -208,34 +225,77 @@ fun SingleNoteScreen(
     val colors = colorResIds.map { colorResource(it).toArgb().toLong() }
     var selectedColor by remember { mutableLongStateOf(note.color) }
 
-    LaunchedEffect(content, selectedColor, isPinned) {
-        if (content == note.content && 
+    val scrollState = rememberScrollState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    var textLayoutResultState by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var lastJumpSelection by remember { mutableStateOf(-1) }
+
+    LaunchedEffect(contentValue.text, selectedColor, isPinned) {
+        if (contentValue.text == note.content && 
             selectedColor == note.color && isPinned == note.isPinned) return@LaunchedEffect
         
-        delay(500) // 500ms debounce
-        onSave(note.copy(
-            content = content, 
-            color = selectedColor, 
-            isPinned = isPinned, 
-            lastModified = System.currentTimeMillis()
-        ))
+        delay(500)
+        onSave(note.copy(content = contentValue.text, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
+    }
+
+    // Automatically jump to the current line (cursor) when keyboard opens or focus changes
+    LaunchedEffect(isKeyboardVisible) {
+        if (isEditMode && isKeyboardVisible) {
+            delay(150) // Small delay to let keyboard slide up
+            textLayoutResultState?.let { layout ->
+                val cursorRect = layout.getCursorRect(contentValue.selection.start)
+                scrollState.animateScrollTo(
+                    value = (cursorRect.top - with(density) { 16.dp.toPx() }).toInt().coerceAtLeast(0),
+                    animationSpec = tween(durationMillis = 400)
+                )
+            }
+        }
+    }
+
+    // Follow cursor while typing
+    LaunchedEffect(contentValue.selection, textLayoutResultState) {
+        if (isEditMode && isKeyboardVisible && textLayoutResultState != null) {
+            val layout = textLayoutResultState!!
+            val cursorRect = layout.getCursorRect(contentValue.selection.start)
+            
+            // If the cursor is moving further down than our current scroll, 
+            // adjust scroll to keep it in view.
+            val threshold = with(density) { 100.dp.toPx() } // Aesthetic buffer
+            val targetScroll = (cursorRect.bottom - threshold).toInt().coerceAtLeast(0)
+            
+            if (targetScroll > scrollState.value) {
+                scrollState.animateScrollTo(targetScroll, animationSpec = tween(durationMillis = 100))
+            }
+        }
     }
 
     Scaffold(
+        modifier = Modifier.navigationBarsPadding(),
         topBar = {
-            TopAppBar(
-                title = { },
-                navigationIcon = {
+            Surface(
+                color = Color(selectedColor).copy(alpha = 0.6f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .height(48.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = {
                         if (isEditMode) {
-                            onSave(note.copy(content = content, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
+                            onSave(note.copy(content = contentValue.text, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
                         }
                         onBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
-                actions = {
+                    
+                    Spacer(modifier = Modifier.weight(1f))
+
                     IconButton(onClick = { isPinned = !isPinned }) {
                         Icon(
                             imageVector = Icons.Default.PushPin,
@@ -243,106 +303,137 @@ fun SingleNoteScreen(
                             tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                     }
-                    IconButton(onClick = { showDeleteConfirm = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(selectedColor).copy(alpha = 0.6f)
-                )
-            )
+                }
+            }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { 
-                    if (isEditMode) {
-                        onSave(note.copy(content = content, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
-                    }
-                    isEditMode = !isEditMode 
-                },
-                containerColor = if (isEditMode) Color(0xFF4CAF50) else MaterialTheme.colorScheme.secondary,
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
-                    contentDescription = "Toggle Edit",
-                    tint = Color.White
-                )
+                if (!isEditMode && isMenuExpanded) {
+                    // Bubble 1: Delete
+                    FloatingActionButton(
+                        onClick = { 
+                            showDeleteConfirm = true
+                            isMenuExpanded = false
+                        },
+                        containerColor = Color(0xFF6B2424), // Dark, muted burgundy red
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, "Delete", tint = Color.White)
+                    }
+                    
+                    // Bubble 2: Edit
+                    FloatingActionButton(
+                        onClick = { 
+                            isEditMode = true
+                            isMenuExpanded = false
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, "Edit", tint = Color.White)
+                    }
+                }
+
+                FloatingActionButton(
+                    onClick = { 
+                        if (isEditMode) {
+                            onSave(note.copy(content = contentValue.text, color = selectedColor, isPinned = isPinned, lastModified = System.currentTimeMillis()))
+                            isEditMode = false
+                        } else {
+                            isMenuExpanded = !isMenuExpanded
+                        }
+                    },
+                    containerColor = if (isEditMode) Color(0xFF4CAF50) else MaterialTheme.colorScheme.secondary,
+                    // Removed imePadding here so it anchors relative to the bottom bar
+                ) {
+                    Icon(
+                        imageVector = if (isEditMode) Icons.Default.Check 
+                                     else if (isMenuExpanded) Icons.Default.Close 
+                                     else Icons.Default.KeyboardArrowUp,
+                        contentDescription = "Toggle Edit",
+                        tint = Color.White
+                    )
+                }
             }
         },
         bottomBar = {
             if (isEditMode) {
                 Surface(
                     color = Color(selectedColor).copy(alpha = 0.8f),
-                    tonalElevation = 4.dp
+                    modifier = Modifier.imePadding()
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Color Picker
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            colors.forEach { colorVal ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .background(Color(colorVal), CircleShape)
-                                        .border(
-                                            width = if (selectedColor == colorVal) 2.dp else 0.dp,
-                                            color = if (selectedColor == colorVal) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                            shape = CircleShape
-                                        )
-                                        .clickable { selectedColor = colorVal }
-                                )
-                            }
+                        colors.forEach { colorVal ->
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(colorVal), CircleShape)
+                                    .border(
+                                        width = if (selectedColor == colorVal) 2.dp else 0.dp,
+                                        color = if (selectedColor == colorVal) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { selectedColor = colorVal }
+                            )
                         }
                     }
                 }
             }
         },
-        containerColor = Color(selectedColor).copy(alpha = 0.4f)
+        containerColor = Color(selectedColor).copy(alpha = 0.4f),
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color(selectedColor).copy(alpha = 0.4f))
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp)
         ) {
             if (isEditMode) {
-                TextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    placeholder = { Text("Note content") },
+                BasicTextField(
+                    value = contentValue,
+                    onValueChange = { 
+                        contentValue = it 
+                    },
+                    onTextLayout = { textLayoutResultState = it },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    )
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { innerTextField: @Composable () -> Unit ->
+                        if (contentValue.text.isEmpty()) {
+                            Text("Note content", color = Color.Gray.copy(alpha = 0.5f))
+                        }
+                        innerTextField()
+                    }
                 )
+                // Bottom spacer to allow any line to scroll to the top
+                Spacer(modifier = Modifier.height(128.dp))
             } else {
-                val annotatedString = MarkdownParser.parse(content)
+                val annotatedString = MarkdownParser.parse(contentValue.text)
                 var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
                 Text(
                     text = annotatedString,
                     style = MaterialTheme.typography.bodyLarge,
                     onTextLayout = { textLayoutResult = it },
-                    modifier = Modifier.pointerInput(content) {
+                    modifier = Modifier.pointerInput(contentValue.text) {
                         detectTapGestures { offset ->
                             textLayoutResult?.let { layoutResult ->
                                 val position = layoutResult.getOffsetForPosition(offset)
                                 annotatedString.getStringAnnotations(tag = "CHECKBOX", start = position, end = position)
                                     .firstOrNull()?.let { annotation ->
                                         val lineIndex = annotation.item.toIntOrNull() ?: return@let
-                                        val lines = content.split("\n").toMutableList()
+                                        val lines = contentValue.text.split("\n").toMutableList()
                                         if (lineIndex < lines.size) {
                                             val line = lines[lineIndex]
                                             lines[lineIndex] = when {
@@ -354,7 +445,7 @@ fun SingleNoteScreen(
                                                 line.startsWith("* [X] ") -> line.replaceFirst("* [X] ", "* [ ] ")
                                                 else -> line
                                             }
-                                            content = lines.joinToString("\n")
+                                            contentValue = contentValue.copy(text = lines.joinToString("\n"))
                                         }
                                     }
                             }

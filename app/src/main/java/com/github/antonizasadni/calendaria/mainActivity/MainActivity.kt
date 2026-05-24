@@ -17,6 +17,7 @@ import com.github.antonizasadni.calendaria.tasks.Note
 import com.github.antonizasadni.calendaria.tasks.RepetitiveTask
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
 import com.github.antonizasadni.calendaria.ui.theme.CalendAriaTheme
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -157,9 +158,8 @@ fun CalendAriaApp() {
                     onDismissDialog = { showAddTaskDialog = false },
                     onMonthYearChange = { m, y -> selectedMonth = m; selectedYear = y },
                     onTasksChanged = { refreshTasks() },
-                ) { isVisible ->
-                    isAppFabVisible = isVisible
-                }
+                    onFabVisibilityChange = { isAppFabVisible = it },
+                )
             }
         }
     }

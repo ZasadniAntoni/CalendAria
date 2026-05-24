@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -42,15 +43,25 @@ fun BirthdayScreen(
     var birthdayToDelete by remember { mutableStateOf<Birthday?>(null) }
     var searchQuery by remember { mutableStateOf("") }
 
-    val filteredBirthdays by remember(searchQuery, birthdays) {
+    val birthdayGroups by remember(searchQuery, birthdays) {
         derivedStateOf {
-            birthdays.filter { it.name.contains(searchQuery, ignoreCase = true) }
-                .sortedWith(
-                    compareBy<Birthday> { parseDate(it.date).monthValue }
-                        .thenBy { parseDate(it.date).dayOfMonth }
-                )
+            val today = LocalDate.now()
+            val filtered = birthdays.filter { it.name.contains(searchQuery, ignoreCase = true) }
+            
+            val (upcoming, passed) = filtered.partition { birthday ->
+                val date = parseDate(birthday.date)
+                val bdayThisYear = date.withYear(today.year)
+                !bdayThisYear.isBefore(today)
+            }
+
+            val sortCriteria = compareBy<Birthday> { parseDate(it.date).monthValue }
+                .thenBy { parseDate(it.date).dayOfMonth }
+
+            upcoming.sortedWith(sortCriteria) to passed.sortedWith(sortCriteria)
         }
     }
+
+    val (upcomingBirthdays, passedBirthdays) = birthdayGroups
 
     Column(modifier = Modifier.fillMaxSize()) {
         SearchableTopBar(
@@ -70,11 +81,29 @@ fun BirthdayScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(filteredBirthdays, key = { it.id }) { birthday ->
+                items(upcomingBirthdays, key = { it.id }) { birthday ->
                     BirthdayItem(
                         birthday = birthday,
                         onClick = { editingBirthday = birthday }
                     )
+                }
+
+                if (passedBirthdays.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Celebrate in the following year:",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(passedBirthdays, key = { it.id }) { birthday ->
+                        BirthdayItem(
+                            birthday = birthday,
+                            isPassed = true,
+                            onClick = { editingBirthday = birthday }
+                        )
+                    }
                 }
             }
         }
@@ -127,6 +156,7 @@ fun BirthdayScreen(
 @Composable
 fun BirthdayItem(
     birthday: Birthday,
+    isPassed: Boolean = false,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -141,10 +171,13 @@ fun BirthdayItem(
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = Color(birthday.color).copy(alpha = 0.2f))
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPassed) Color.Gray.copy(alpha = 0.1f) 
+                            else Color(birthday.color).copy(alpha = 0.2f)
+        )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(16.dp).alpha(if (isPassed) 0.5f else 1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
