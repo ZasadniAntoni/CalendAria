@@ -13,3 +13,6 @@ The AI inside the Android Panda was much better and quicker with solutions, also
 ## xXxXxXx
 
 I'm a quite cucumber in app creation but seeing the app coming to life and responding to my inputs, working properly was pretty fun. Might do some more apps or even games later smh ;)
+
+## Used Libraries
+[compose-markdown by jeziellago](https://github.com/jeziellago/compose-markdown)
