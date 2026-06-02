@@ -1,6 +1,7 @@
 package com.github.antonizasadni.calendaria.importantView
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,8 +37,10 @@ import com.github.antonizasadni.calendaria.tasks.TaskFilter
 import com.github.antonizasadni.calendaria.tasks.TaskManagement
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Composable
@@ -117,6 +120,7 @@ fun ImportantTasksScreen(
                                 checked = task.isCompleted,
                                 onCheckedChange = {
                                     TaskManagement.toggleImportantTaskCompletion(context, task.id)
+                                    ReminderManager.scheduleAllImportantTasks(context)
                                     onTasksChanged()
                                 }
                             )
@@ -193,11 +197,9 @@ fun ImportantTasksScreen(
             },
             onToggleComplete = {
                 TaskManagement.toggleImportantTaskCompletion(context, viewingTask!!.id)
-                val updatedTask = viewingTask?.copy(isCompleted = !viewingTask!!.isCompleted)
-                updatedTask?.let { ReminderManager.scheduleImportantTask(context, it) }
+                ReminderManager.scheduleAllImportantTasks(context)
                 onTasksChanged()
-                // Update local state to reflect change immediately in the dialog
-                viewingTask = updatedTask
+                viewingTask = null 
             }
         )
     }
@@ -313,6 +315,14 @@ fun ViewImportantTaskDialog(
                     )
                 }
 
+                if (task.recurrence != "None") {
+                    Text(
+                        text = "Repeats: ${task.recurrence}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = task.description, style = MaterialTheme.typography.bodyLarge)
             }
@@ -324,8 +334,7 @@ fun ViewImportantTaskDialog(
                 }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
-        },
-        // place here
+        }
     )
 }
 
@@ -343,6 +352,7 @@ fun AddImportantTaskDialog(
     var taskTime by remember { mutableStateOf(existingTask?.taskTime ?: "Whole Day") }
     var durationMinutes by remember { mutableIntStateOf(existingTask?.durationMinutes?.takeIf { it > 0 } ?: 60) }
     var notificationsEnabled by remember { mutableStateOf(existingTask?.notificationsEnabled ?: true) }
+    var recurrence by remember { mutableStateOf(existingTask?.recurrence ?: "None") }
     
     // Reminder states
     var reminderDate by remember { mutableStateOf(existingTask?.reminderDate ?: taskDate) }
@@ -354,16 +364,18 @@ fun AddImportantTaskDialog(
     var showReminderTimePicker by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = if (existingTask != null) {
-            LocalDate.parse(existingTask.taskDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        } else System.currentTimeMillis()
+        initialSelectedDateMillis = try {
+            LocalDate.parse(taskDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+        } catch (_: Exception) {
+            System.currentTimeMillis()
+        }
     )
     
     val reminderDatePickerState = rememberDatePickerState(
         initialSelectedDateMillis = try {
             LocalDate.parse(reminderDate, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
         } catch (_: Exception) { 
             System.currentTimeMillis() 
         }
@@ -405,7 +417,11 @@ fun AddImportantTaskDialog(
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = taskTime == "Whole Day", onClick = { taskTime = "Whole Day" })
+                    RadioButton(selected = taskTime == "Whole Day", onClick = { 
+                        val oldTime = taskTime
+                        taskTime = "Whole Day" 
+                        if (reminderTime == oldTime) reminderTime = "Whole Day"
+                    })
                     Text("Whole Day")
                     Spacer(modifier = Modifier.width(8.dp))
                     RadioButton(selected = taskTime != "Whole Day", onClick = { showTimePicker = true })
@@ -420,6 +436,23 @@ fun AddImportantTaskDialog(
                         valueRange = 15f..240f,
                         steps = 14
                     )
+                }
+
+                Text("Recurrence", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("None", "Weekly", "Monthly", "Yearly").forEach { option ->
+                        FilterChip(
+                            selected = recurrence == option,
+                            onClick = { recurrence = option },
+                            label = { Text(option) }
+                        )
+                    }
                 }
 
                 Row(
@@ -547,7 +580,8 @@ fun AddImportantTaskDialog(
                             isCompleted = existingTask?.isCompleted ?: false,
                             notificationsEnabled = notificationsEnabled,
                             reminderDate = if (notificationsEnabled) reminderDate else null,
-                            reminderTime = if (notificationsEnabled) reminderTime else null
+                            reminderTime = if (notificationsEnabled) reminderTime else null,
+                            recurrence = recurrence
                         )
                     )
                 }
@@ -564,14 +598,23 @@ fun AddImportantTaskDialog(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        val newDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
+                        val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+                        val newLocalDate = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.of("UTC"))
                             .toLocalDate()
-                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                        val newDateStr = newLocalDate.format(formatter)
                         
-                        // If reminder was in sync, keep it in sync
-                        if (reminderDate == taskDate) reminderDate = newDate
-                        taskDate = newDate
+                        // Maintain offset for reminder
+                        try {
+                            val oldT = LocalDate.parse(taskDate, formatter)
+                            val oldR = LocalDate.parse(reminderDate, formatter)
+                            val daysOffset = ChronoUnit.DAYS.between(oldT, oldR)
+                            reminderDate = newLocalDate.plusDays(daysOffset).format(formatter)
+                        } catch (e: Exception) {
+                            reminderDate = newDateStr
+                        }
+                        
+                        taskDate = newDateStr
                     }
                     showDatePicker = false
                 }) { Text("OK") }
@@ -590,7 +633,23 @@ fun AddImportantTaskDialog(
             onDismiss = { showTimePicker = false },
             onConfirm = { hour, minute, amPm ->
                 val newTime = TaskManagement.convertToUniformTime(hour, minute, amPm)
-                if (reminderTime == taskTime) reminderTime = newTime
+                
+                // Maintain offset for reminder time
+                if (taskTime != "Whole Day" && reminderTime != "Whole Day") {
+                    try {
+                        val oldTMins = TaskManagement.parseTimeToMinutes(taskTime)
+                        val newTMins = TaskManagement.parseTimeToMinutes(newTime)
+                        val oldRMins = TaskManagement.parseTimeToMinutes(reminderTime)
+                        val offset = oldRMins - oldTMins
+                        val newRMins = (newTMins + offset).coerceIn(0, 1439)
+                        reminderTime = TaskManagement.convertToUniformTime(newRMins / 60, newRMins % 60, "")
+                    } catch (e: Exception) {
+                        reminderTime = newTime
+                    }
+                } else if (reminderTime == taskTime) {
+                    reminderTime = newTime
+                }
+                
                 taskTime = newTime
                 showTimePicker = false
             }
@@ -604,7 +663,7 @@ fun AddImportantTaskDialog(
                 TextButton(onClick = {
                     reminderDatePickerState.selectedDateMillis?.let { millis ->
                         reminderDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
+                            .atZone(ZoneId.of("UTC"))
                             .toLocalDate()
                             .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                     }

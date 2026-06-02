@@ -6,7 +6,8 @@ import com.github.antonizasadni.calendaria.completionList.FileManagement
 import com.google.gson.Gson
 import java.util.UUID
 import java.time.LocalDate
-
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import com.google.gson.annotations.SerializedName
 
 data class RepetitiveTask(
@@ -35,7 +36,8 @@ data class ImportantTask(
     val isCompleted: Boolean = false,
     val notificationsEnabled: Boolean = true,
     val reminderDate: String? = null,
-    val reminderTime: String? = null
+    val reminderTime: String? = null,
+    val recurrence: String = "None"
 )
 
 data class DailyPlan(
@@ -53,9 +55,10 @@ data class Birthday(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val date: String, // Store as "dd.MM" or "dd.MM.yyyy"
+    val type: String = "Birthday", // "Birthday" or "Name Day"
     val notificationsEnabled: Boolean = true,
     val reminderTime: String = "08:00 AM",
-    val color: Long = 0xFFFFD700 // Gold
+    val color: Long = 0xF0FFD700 // Gold
 )
 
 data class Note(
@@ -109,10 +112,59 @@ object TaskManagement {
     }
 
     fun toggleImportantTaskCompletion(context: Context, taskId: String) {
-        val currentTasks = loadImportantTasks(context).map {
-            if (it.id == taskId) it.copy(isCompleted = !it.isCompleted) else it
+        val tasks = loadImportantTasks(context)
+        val updatedTasks = mutableListOf<ImportantTask>()
+        
+        tasks.forEach { task ->
+            if (task.id == taskId) {
+                val nowCompleted = !task.isCompleted
+                updatedTasks.add(task.copy(isCompleted = nowCompleted))
+                
+                // If just completed and has recurrence, create next one
+                if (nowCompleted && task.recurrence != "None") {
+                    updatedTasks.add(createNextOccurrence(task))
+                }
+            } else {
+                updatedTasks.add(task)
+            }
         }
-        saveImportantTasks(context, currentTasks)
+        saveImportantTasks(context, updatedTasks)
+    }
+
+    private fun createNextOccurrence(task: ImportantTask): ImportantTask {
+        val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+        val taskDate = try {
+            LocalDate.parse(task.taskDate, formatter)
+        } catch (e: Exception) {
+            LocalDate.now()
+        }
+
+        val nextDate = when (task.recurrence) {
+            "Weekly" -> taskDate.plusWeeks(1)
+            "Monthly" -> taskDate.plusMonths(1)
+            "Yearly" -> taskDate.plusYears(1)
+            else -> taskDate
+        }
+
+        val nextDateStr = nextDate.format(formatter)
+
+        // Calculate next reminder date based on offset
+        val nextReminderDate = task.reminderDate?.let { rDate ->
+            try {
+                val oldRDate = LocalDate.parse(rDate, formatter)
+                val offset = ChronoUnit.DAYS.between(taskDate, oldRDate)
+                nextDate.plusDays(offset).format(formatter)
+            } catch (e: Exception) {
+                nextDateStr
+            }
+        }
+
+        return task.copy(
+            id = UUID.randomUUID().toString(),
+            taskDate = nextDateStr,
+            reminderDate = nextReminderDate,
+            isCompleted = false
+        )
     }
 
     data class DailyUpdateResult(

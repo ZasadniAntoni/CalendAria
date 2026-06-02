@@ -116,22 +116,33 @@ fun DayScreen(
                         
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.2f)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD700))
+                            colors = CardDefaults.cardColors(containerColor = Color(birthday.color).copy(alpha = 0.2f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(birthday.color))
                         ) {
                             Row(
                                 modifier = Modifier.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("🎂", fontSize = 24.sp)
+                                val icon = when (birthday.type) {
+                                    "Name Day" -> "💐"
+                                    else -> "🎂"
+                                }
+                                Text(icon, fontSize = 24.sp)
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
                                     Text(
-                                        text = "${birthday.name}'s Birthday",
+                                        text = when (birthday.type) {
+                                            "Name Day" -> "${birthday.name}'s Name Day"
+                                            else -> "${birthday.name}'s Birthday"
+                                        },
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.titleMedium
                                     )
-                                    if (age > 0) {
+                                    val showAge = when (birthday.type) {
+                                        "Name Day" -> false
+                                        else -> age > 0
+                                    }
+                                    if (showAge) {
                                         Text(
                                             text = "Turning $age today!",
                                             style = MaterialTheme.typography.bodySmall,

@@ -178,7 +178,7 @@ fun FilterBottomSheet(
     var tempFilter by remember { mutableStateOf(currentFilter) }
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = tempFilter.selectedDate?.atStartOfDay(ZoneId.systemDefault())
+        initialSelectedDateMillis = tempFilter.selectedDate?.atStartOfDay(ZoneId.of("UTC"))
             ?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis()
     )
 
@@ -340,7 +340,7 @@ fun FilterBottomSheet(
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
                         val pickedDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
+                            .atZone(ZoneId.of("UTC"))
                             .toLocalDate()
                         // Update the temp filter so it shows in the BottomSheet immediately
                         tempFilter = tempFilter.copy(selectedDate = pickedDate)

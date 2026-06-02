@@ -149,7 +149,7 @@ fun CalendarScreen(
                         modifier = Modifier.padding(2.dp).clickable { selectedDate = date },
                         colors = when {
                             isToday -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                            dBirthdays.isNotEmpty() -> CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.3f))
+                            dBirthdays.isNotEmpty() -> CardDefaults.cardColors(containerColor = Color(dBirthdays.first().color).copy(alpha = 0.3f))
                             dImportant.isNotEmpty() -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
                             dRepetitive.isNotEmpty() -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                             else -> CardDefaults.cardColors()
@@ -158,7 +158,10 @@ fun CalendarScreen(
                         Box(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
                             if (dBirthdays.isNotEmpty()) {
                                 Text(
-                                    text = "🎂",
+                                    text = when {
+                                        dBirthdays.all { it.type == "Name Day" } -> "💐"
+                                        else -> "🎂"
+                                    },
                                     fontSize = 8.sp,
                                     modifier = Modifier.align(Alignment.TopEnd)
                                 )

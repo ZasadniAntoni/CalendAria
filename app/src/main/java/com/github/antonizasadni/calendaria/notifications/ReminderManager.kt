@@ -310,12 +310,21 @@ object ReminderManager {
             val intent = Intent(context, ReminderReceiver::class.java).apply {
                 putExtra("type", "birthday")
                 putExtra("task_id", birthday.id)
-                putExtra("task_title", "It's ${birthday.name}'s Birthday! 🎂")
-                val age = if (birthDate.year < today.year) {
-                    val currentAge = nextBirthdayDate.year - birthDate.year
-                    "Turning $currentAge today."
-                } else ""
-                putExtra("task_desc", age)
+                val title = when (birthday.type) {
+                    "Name Day" -> "It's ${birthday.name}'s Name Day! 💐"
+                    else -> "It's ${birthday.name}'s Birthday! 🎂"
+                }
+                putExtra("task_title", title)
+                val ageText = when (birthday.type) {
+                    "Name Day" -> ""
+                    else -> {
+                        if (birthDate.year < today.year) {
+                            val currentAge = nextBirthdayDate.year - birthDate.year
+                            "Turning $currentAge today."
+                        } else ""
+                    }
+                }
+                putExtra("task_desc", ageText)
             }
             
             val pendingIntent = PendingIntent.getBroadcast(

@@ -184,13 +184,22 @@ fun BirthdayItem(
                 modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(birthday.color)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("🎂", fontSize = 24.sp)
+                val icon = when (birthday.type) {
+                    "Name Day" -> "💐"
+                    else -> "🎂"
+                }
+                Text(icon, fontSize = 32.sp)
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(birthday.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                val birthdayText = if (age >= 0) "Turns ${age + 1} on ${date.format(DateTimeFormatter.ofPattern("MMMM d"))}"
-                                 else "Birthday on ${date.format(DateTimeFormatter.ofPattern("MMMM d"))}"
+                val birthdayText = when (birthday.type) {
+                    "Name Day" -> "Name Day on ${date.format(DateTimeFormatter.ofPattern("MMMM d"))}"
+                    else -> {
+                        if (isPassed || age < 0) "Birthday on ${date.format(DateTimeFormatter.ofPattern("MMMM d"))}"
+                        else "Turns ${age + 1} on ${date.format(DateTimeFormatter.ofPattern("MMMM d"))}"
+                    }
+                }
                 Text(text = birthdayText, style = MaterialTheme.typography.bodySmall)
                 
                 if (birthday.notificationsEnabled) {
@@ -216,6 +225,7 @@ fun AddOrEditBirthdayDialog(
     val context = LocalContext.current
     var name by remember { mutableStateOf(existingBirthday?.name ?: "") }
     var dateStr by remember { mutableStateOf(existingBirthday?.date ?: LocalDate.now().toString()) }
+    var birthdayType by remember { mutableStateOf(existingBirthday?.type ?: "Birthday") }
     var notificationsEnabled by remember { mutableStateOf(existingBirthday?.notificationsEnabled ?: true) }
     var reminderTime by remember { mutableStateOf(existingBirthday?.reminderTime ?: "08:00 AM") }
     
@@ -232,12 +242,36 @@ fun AddOrEditBirthdayDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existingBirthday == null) "New Birthday" else "Edit Birthday") },
+        title = { Text(if (existingBirthday == null) "New Event" else "Edit Event") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val options = listOf("Birthday", "Name Day")
+                    options.forEachIndexed { index, label ->
+                        SegmentedButton(
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                            onClick = { birthdayType = label },
+                            selected = birthdayType == label,
+                            icon = {
+                                SegmentedButtonDefaults.Icon(active = birthdayType == label) {
+                                    Icon(
+                                        imageVector = if (label == "Birthday") Icons.Default.Cake else Icons.Default.LocalFlorist,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SegmentedButtonDefaults.IconSize)
+                                    )
+                                }
+                            }
+                        ) {
+                            Text(label)
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -252,12 +286,23 @@ fun AddOrEditBirthdayDialog(
                         d.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                     } catch (_: Exception) { dateStr },
                     onValueChange = { },
-                    label = { Text("Birth Date") },
+                    label = { 
+                        Text(
+                            when (birthdayType) {
+                                "Name Day" -> "Name Day Date"
+                                else -> "Birth Date"
+                            }
+                        ) 
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     readOnly = true,
                     trailingIcon = {
                         IconButton(onClick = { showDatePicker = true }) {
-                            Icon(Icons.Default.Cake, contentDescription = null)
+                            val icon = when (birthdayType) {
+                                "Name Day" -> Icons.Default.LocalFlorist
+                                else -> Icons.Default.Cake
+                            }
+                            Icon(icon, contentDescription = null)
                         }
                     }
                 )
@@ -342,8 +387,13 @@ fun AddOrEditBirthdayDialog(
                                 id = existingBirthday?.id ?: UUID.randomUUID().toString(),
                                 name = name,
                                 date = dateStr,
+                                type = birthdayType,
                                 notificationsEnabled = notificationsEnabled,
-                                reminderTime = reminderTime
+                                reminderTime = reminderTime,
+                                color = when (birthdayType) {
+                                    "Name Day" -> 0xFF435B43
+                                    else -> 0xFFFFD700
+                                }
                             )
                         )
                     }
